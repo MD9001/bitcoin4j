@@ -43,35 +43,16 @@ public class Threading {
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
+     * A dummy executor that just invokes the runnable immediately. Use this over more complex executors
+     * (e.g. those extending {@link ExecutorService}), which are overkill for our needs.
+     */
+    public static final Executor SAME_THREAD;
+    /**
      * An executor with one thread that is intended for running event listeners on. This ensures all event listener code
      * runs without any locks being held. It's intended for the API user to run things on. Callbacks registered by
      * bitcoinj internally shouldn't normally run here, although currently there are a few exceptions.
      */
     public static Executor USER_THREAD;
-
-    /**
-     * A dummy executor that just invokes the runnable immediately. Use this over more complex executors
-     * (e.g. those extending {@link ExecutorService}), which are overkill for our needs.
-     */
-    public static final Executor SAME_THREAD;
-
-    /**
-     * Put a dummy task into the queue and wait for it to be run. Because it's single threaded, this means all
-     * tasks submitted before this point are now completed. Usually you won't want to use this method - it's a
-     * convenience primarily used in unit testing. If you want to wait for an event to be called the right thing
-     * to do is usually to create a {@link com.google.common.util.concurrent.SettableFuture} and then call set
-     * on it. You can then either block on that future, compose it, add listeners to it and so on.
-     */
-    public static void waitForUserCode() {
-        final CountDownLatch latch = new CountDownLatch(1);
-        USER_THREAD.execute(new Runnable() {
-            @Override public void run() {
-                latch.countDown();
-            }
-        });
-        Uninterruptibles.awaitUninterruptibly(latch);
-    }
-
     /**
      * An exception handler that will be invoked for any exceptions that occur in the user thread, and
      * any unhandled exceptions that are caught whilst the framework is processing network traffic or doing other
@@ -82,49 +63,28 @@ public class Threading {
      */
     @Nullable
     public static volatile Thread.UncaughtExceptionHandler uncaughtExceptionHandler;
-
-    public static class UserThread extends Thread implements Executor {
-        private static final Logger log = LoggerFactory.getLogger(UserThread.class);
-        // 10,000 pending tasks is entirely arbitrary and may or may not be appropriate for the device we're
-        // running on.
-        public static int WARNING_THRESHOLD = 10000;
-        private LinkedBlockingQueue<Runnable> tasks;
-
-        public UserThread() {
-            super("bitcoinj user thread");
-            setDaemon(true);
-            tasks = new LinkedBlockingQueue<>();
-            start();
-        }
-
-        @SuppressWarnings("InfiniteLoopStatement") @Override
-        public void run() {
-            while (true) {
-                Runnable task = Uninterruptibles.takeUninterruptibly(tasks);
-                try {
-                    task.run();
-                } catch (Throwable throwable) {
-                    log.warn("Exception in user thread", throwable);
-                    UncaughtExceptionHandler handler = uncaughtExceptionHandler;
-                    if (handler != null)
-                        handler.uncaughtException(this, throwable);
+    public static CycleDetectingLockFactory factory;
+    /**
+     * A caching thread pool that creates daemon threads, which won't keep the JVM alive waiting for more work.
+     */
+    public static ListeningExecutorService THREAD_POOL = MoreExecutors.listeningDecorator(
+            Executors.newCachedThreadPool(new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r);
+                    t.setName("Threading.THREAD_POOL worker");
+                    t.setDaemon(true);
+                    return t;
                 }
-            }
-        }
+            })
+    );
+    private static CycleDetectingLockFactory.Policy policy;
 
-        @Override
-        public void execute(Runnable command) {
-            final int size = tasks.size();
-            if (size == WARNING_THRESHOLD) {
-                log.warn(
-                    "User thread has {} pending tasks, memory exhaustion may occur.\n" +
-                    "If you see this message, check your memory consumption and see if it's problematic or excessively spikey.\n" +
-                    "If it is, check for deadlocked or slow event handlers. If it isn't, try adjusting the constant \n" +
-                    "Threading.UserThread.WARNING_THRESHOLD upwards until it's a suitable level for your app, or Integer.MAX_VALUE to disable." , size);
-            }
-            Uninterruptibles.putUninterruptibly(tasks, command);
-        }
-    }
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Cycle detecting lock factories
+    //
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     static {
         // Default policy goes here. If you want to change this, use one of the static methods before
@@ -141,14 +101,23 @@ public class Threading {
         };
     }
 
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //
-    // Cycle detecting lock factories
-    //
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    private static CycleDetectingLockFactory.Policy policy;
-    public static CycleDetectingLockFactory factory;
+    /**
+     * Put a dummy task into the queue and wait for it to be run. Because it's single threaded, this means all
+     * tasks submitted before this point are now completed. Usually you won't want to use this method - it's a
+     * convenience primarily used in unit testing. If you want to wait for an event to be called the right thing
+     * to do is usually to create a {@link com.google.common.util.concurrent.SettableFuture} and then call set
+     * on it. You can then either block on that future, compose it, add listeners to it and so on.
+     */
+    public static void waitForUserCode() {
+        final CountDownLatch latch = new CountDownLatch(1);
+        USER_THREAD.execute(new Runnable() {
+            @Override
+            public void run() {
+                latch.countDown();
+            }
+        });
+        Uninterruptibles.awaitUninterruptibly(latch);
+    }
 
     public static ReentrantLock lock(Class clazz) {
         return lock(clazz.getSimpleName() + " lock");
@@ -173,13 +142,13 @@ public class Threading {
         setPolicy(CycleDetectingLockFactory.Policies.DISABLED);
     }
 
+    public static CycleDetectingLockFactory.Policy getPolicy() {
+        return policy;
+    }
+
     public static void setPolicy(CycleDetectingLockFactory.Policy policy) {
         Threading.policy = policy;
         factory = CycleDetectingLockFactory.newInstance(policy);
-    }
-
-    public static CycleDetectingLockFactory.Policy getPolicy() {
-        return policy;
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -188,16 +157,47 @@ public class Threading {
     //
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /** A caching thread pool that creates daemon threads, which won't keep the JVM alive waiting for more work. */
-    public static ListeningExecutorService THREAD_POOL = MoreExecutors.listeningDecorator(
-            Executors.newCachedThreadPool(new ThreadFactory() {
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r);
-                    t.setName("Threading.THREAD_POOL worker");
-                    t.setDaemon(true);
-                    return t;
+    public static class UserThread extends Thread implements Executor {
+        private static final Logger log = LoggerFactory.getLogger(UserThread.class);
+        // 10,000 pending tasks is entirely arbitrary and may or may not be appropriate for the device we're
+        // running on.
+        public static int WARNING_THRESHOLD = 10000;
+        private final LinkedBlockingQueue<Runnable> tasks;
+
+        public UserThread() {
+            super("bitcoinj user thread");
+            setDaemon(true);
+            tasks = new LinkedBlockingQueue<>();
+            start();
+        }
+
+        @SuppressWarnings("InfiniteLoopStatement")
+        @Override
+        public void run() {
+            while (true) {
+                Runnable task = Uninterruptibles.takeUninterruptibly(tasks);
+                try {
+                    task.run();
+                } catch (Throwable throwable) {
+                    log.warn("Exception in user thread", throwable);
+                    UncaughtExceptionHandler handler = uncaughtExceptionHandler;
+                    if (handler != null)
+                        handler.uncaughtException(this, throwable);
                 }
-            })
-    );
+            }
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            final int size = tasks.size();
+            if (size == WARNING_THRESHOLD) {
+                log.warn(
+                        "User thread has {} pending tasks, memory exhaustion may occur.\n" +
+                                "If you see this message, check your memory consumption and see if it's problematic or excessively spikey.\n" +
+                                "If it is, check for deadlocked or slow event handlers. If it isn't, try adjusting the constant \n" +
+                                "Threading.UserThread.WARNING_THRESHOLD upwards until it's a suitable level for your app, or Integer.MAX_VALUE to disable.", size);
+            }
+            Uninterruptibles.putUninterruptibly(tasks, command);
+        }
+    }
 }

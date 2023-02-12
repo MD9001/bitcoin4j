@@ -28,10 +28,10 @@ public class ReadUtils {
 
     public static final int MAX_SIZE = 0x02000000; // 32MB
 
-    private byte[] payload;
+    private final byte[] payload;
     private int cursor;
 
-    public ReadUtils(byte[] payload){
+    public ReadUtils(byte[] payload) {
         this.payload = payload;
         cursor = 0;
     }

@@ -20,7 +20,7 @@ public enum SigHashType {
     ALL(1),
     NONE(2),
     SINGLE(3),
-    FORKID (0x40),
+    FORKID(0x40),
     ANYONECANPAY(0x80), // Caution: Using this type in isolation is non-standard. Treated similar to ANYONECANPAY_ALL.
     ANYONECANPAY_ALL(0x81),
     ANYONECANPAY_NONE(0x82),
@@ -32,8 +32,18 @@ public enum SigHashType {
     /**
      * @param value
      */
-    private SigHashType(final int value) {
+    SigHashType(final int value) {
         this.value = value;
+    }
+
+    public static boolean hasValue(int value) {
+
+        for (SigHashType t : values()) {
+            if (t.value == value)
+                return true;
+        }
+
+        return false;
     }
 
     /**
@@ -41,15 +51,5 @@ public enum SigHashType {
      */
     public byte byteValue() {
         return (byte) this.value;
-    }
-
-    public static boolean hasValue(int value){
-
-        for (SigHashType t : values()){
-            if (t.value == value)
-                return true;
-        }
-
-        return false;
     }
 }

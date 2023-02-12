@@ -25,9 +25,8 @@ import java.util.Objects;
 /**
  * This is more traditionally referred to as a UTXO. The Transaction Outpoint is a convenience
  * POJO that ties together information from the Transaction Output we are spending from .
- *
+ * <p>
  * A TransactionOutput datastructure by itself does not contain all this information.
- *
  */
 public class TransactionOutpoint {
 

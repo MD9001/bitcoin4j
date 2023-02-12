@@ -4,17 +4,16 @@ import org.twostack.bitcoin4j.PublicKey;
 import org.twostack.bitcoin4j.script.*;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
-public class P2MSLockBuilder extends LockingScriptBuilder{
+public class P2MSLockBuilder extends LockingScriptBuilder {
 
     List<PublicKey> publicKeyList = new ArrayList<>();
     int requiredSigs = 0;
     boolean sorting = false;
 
 
-    public P2MSLockBuilder(List<PublicKey> publicKeys, int requiredSigs){
+    public P2MSLockBuilder(List<PublicKey> publicKeys, int requiredSigs) {
 
         super();
         this.sorting = true; //default to true for sorting when not specified
@@ -23,7 +22,7 @@ public class P2MSLockBuilder extends LockingScriptBuilder{
 
     }
 
-    public P2MSLockBuilder(List<PublicKey> publicKeys, int requiredSigs, boolean sortKeys){
+    public P2MSLockBuilder(List<PublicKey> publicKeys, int requiredSigs, boolean sortKeys) {
 
         super();
         this.sorting = sortKeys;
@@ -32,17 +31,17 @@ public class P2MSLockBuilder extends LockingScriptBuilder{
 
     }
 
-    public P2MSLockBuilder(Script script){
-       parse(script);
+    public P2MSLockBuilder(Script script) {
+        parse(script);
     }
 
-    private void parse(Script script){
+    private void parse(Script script) {
 
-        if (script.getChunks().size() > 0){
+        if (script.getChunks().size() > 0) {
 
             List<ScriptChunk> chunks = script.getChunks();
 
-            if (chunks.get(chunks.size() - 1).opcode != ScriptOpCodes.OP_CHECKMULTISIG){
+            if (chunks.get(chunks.size() - 1).opcode != ScriptOpCodes.OP_CHECKMULTISIG) {
                 throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR,
                         "Malformed multisig script. OP_CHECKMULTISIG is missing");
             }
@@ -51,12 +50,12 @@ public class P2MSLockBuilder extends LockingScriptBuilder{
 
             publicKeyList = new ArrayList<>();
 
-            for (int i = 0; i <keyCount; i++){
-                publicKeyList.add(PublicKey.fromBytes(chunks.get(i+1).data));
+            for (int i = 0; i < keyCount; i++) {
+                publicKeyList.add(PublicKey.fromBytes(chunks.get(i + 1).data));
             }
 
             requiredSigs = chunks.get(0).opcode - 80;
-        }else{
+        } else {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR,
                     "Invalid Script or Malformed Script");
         }
@@ -65,15 +64,15 @@ public class P2MSLockBuilder extends LockingScriptBuilder{
     @Override
     public Script getLockingScript() {
 
-        if (requiredSigs == 0){
+        if (requiredSigs == 0) {
             return new ScriptBuilder().build();
         }
 
-        if (requiredSigs > publicKeyList.size()){
+        if (requiredSigs > publicKeyList.size()) {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "You can't have more signatures than public keys");
         }
 
-        if (sorting){
+        if (sorting) {
             publicKeyList.sort((a, b) -> a.getPubKeyHex().compareTo(b.getPubKeyHex()));
         }
 

@@ -22,30 +22,36 @@ import java.math.BigInteger;
 
 public class WriteUtils {
 
-    private ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    private final ByteArrayOutputStream bos = new ByteArrayOutputStream();
 
 
     public void writeBytes(byte[] bytes, int length) {
         bos.write(bytes, 0, length);
     }
 
-    public void writeUint8LE(int val) throws IOException{
-        bos.write((int) (0xFF & val));
+    public void writeUint8LE(int val) throws IOException {
+        bos.write(0xFF & val);
     }
 
-    /** Write 2 bytes to the output stream as unsigned 16-bit integer in little endian format. */
+    /**
+     * Write 2 bytes to the output stream as unsigned 16-bit integer in little endian format.
+     */
     public void writeUint16LE(int val) throws IOException {
-        bos.write((int) (0xFF & val));
-        bos.write((int) (0xFF & (val >> 8)));
+        bos.write(0xFF & val);
+        bos.write(0xFF & (val >> 8));
     }
 
-    /** Write 2 bytes to the output stream as unsigned 16-bit integer in big endian format. */
+    /**
+     * Write 2 bytes to the output stream as unsigned 16-bit integer in big endian format.
+     */
     public void writeUint16BE(int val) throws IOException {
-        bos.write((int) (0xFF & (val >> 8)));
-        bos.write((int) (0xFF & val));
+        bos.write(0xFF & (val >> 8));
+        bos.write(0xFF & val);
     }
 
-    /** Write 4 bytes to the output stream as unsigned 32-bit integer in little endian format. */
+    /**
+     * Write 4 bytes to the output stream as unsigned 32-bit integer in little endian format.
+     */
     public void writeUint32LE(long val) throws IOException {
         bos.write((int) (0xFF & val));
         bos.write((int) (0xFF & (val >> 8)));
@@ -53,7 +59,9 @@ public class WriteUtils {
         bos.write((int) (0xFF & (val >> 24)));
     }
 
-    /** Write 4 bytes to the output stream as unsigned 32-bit integer in big endian format. */
+    /**
+     * Write 4 bytes to the output stream as unsigned 32-bit integer in big endian format.
+     */
     public void writeUint32BE(long val) throws IOException {
         bos.write((int) (0xFF & (val >> 24)));
         bos.write((int) (0xFF & (val >> 16)));
@@ -61,7 +69,9 @@ public class WriteUtils {
         bos.write((int) (0xFF & val));
     }
 
-    /** Write 8 bytes to the output stream as signed 64-bit integer in little endian format. */
+    /**
+     * Write 8 bytes to the output stream as signed 64-bit integer in little endian format.
+     */
     public void writeInt64LE(long val) throws IOException {
         bos.write((int) (0xFF & val));
         bos.write((int) (0xFF & (val >> 8)));
@@ -73,7 +83,9 @@ public class WriteUtils {
         bos.write((int) (0xFF & (val >> 56)));
     }
 
-    /** Write 8 bytes to the output stream as unsigned 64-bit integer in little endian format. */
+    /**
+     * Write 8 bytes to the output stream as unsigned 64-bit integer in little endian format.
+     */
     public void writeUint64LE(BigInteger val) throws IOException {
         byte[] bytes = val.toByteArray();
         if (bytes.length > 8) {
@@ -100,7 +112,7 @@ public class WriteUtils {
         return buf;
     }
 
-    public byte[] getBytes(){
+    public byte[] getBytes() {
         return bos.toByteArray();
     }
 }

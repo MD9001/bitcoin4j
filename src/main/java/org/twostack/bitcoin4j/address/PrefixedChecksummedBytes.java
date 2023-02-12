@@ -33,7 +33,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * <p>
  * The following format is often used to represent some type of data (e.g. key or hash of key):
  * </p>
- * 
+ *
  * <pre>
  * [prefix] [data bytes] [checksum]
  * </pre>
@@ -54,7 +54,7 @@ public abstract class PrefixedChecksummedBytes implements Serializable, Cloneabl
     /**
      * @return network this data is valid for
      */
-    public final NetworkType getNetworkType(){
+    public final NetworkType getNetworkType() {
         return networkType;
     }
 

@@ -22,8 +22,8 @@ import java.util.concurrent.Executor;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
-* A simple wrapper around a listener and an executor, with some utility methods.
-*/
+ * A simple wrapper around a listener and an executor, with some utility methods.
+ */
 public class ListenerRegistration<T> {
     public final T listener;
     public final Executor executor;
@@ -33,7 +33,9 @@ public class ListenerRegistration<T> {
         this.executor = checkNotNull(executor);
     }
 
-    /** Returns true if the listener was removed, else false. */
+    /**
+     * Returns true if the listener was removed, else false.
+     */
     public static <T> boolean removeFromList(T listener, List<? extends ListenerRegistration<T>> list) {
         checkNotNull(listener);
 

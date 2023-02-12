@@ -23,13 +23,13 @@ public abstract class LockingScriptBuilder {
 
     protected Script script;
 
-    public abstract Script getLockingScript();
-
-    public LockingScriptBuilder(){
+    public LockingScriptBuilder() {
         this.script = new ScriptBuilder().build();
     }
 
-    public LockingScriptBuilder(Script script){
+    public LockingScriptBuilder(Script script) {
         this.script = script;
     }
+
+    public abstract Script getLockingScript();
 }

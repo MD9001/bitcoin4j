@@ -6,28 +6,28 @@ import org.twostack.bitcoin4j.script.*;
 import java.util.ArrayList;
 import java.util.List;
 
-public class P2MSUnlockBuilder extends UnlockingScriptBuilder{
+public class P2MSUnlockBuilder extends UnlockingScriptBuilder {
 
     /*
     Default constructor won't init signatures.
     Signatures are injected as part of signing process
      */
-    public P2MSUnlockBuilder(){
+    public P2MSUnlockBuilder() {
         super();
     }
 
-    public P2MSUnlockBuilder(List<TransactionSignature> signatures){
-       super();
-       this.signatures = new ArrayList<>(signatures); //copy signature list
+    public P2MSUnlockBuilder(List<TransactionSignature> signatures) {
+        super();
+        this.signatures = new ArrayList<>(signatures); //copy signature list
     }
 
-    public P2MSUnlockBuilder(Script script){
-       parse(script) ;
+    public P2MSUnlockBuilder(Script script) {
+        parse(script);
     }
 
-    private void parse(Script script){
+    private void parse(Script script) {
 
-        if (script.getChunks().size() > 0){
+        if (script.getChunks().size() > 0) {
 
             List<ScriptChunk> chunks = script.getChunks();
 
@@ -37,12 +37,12 @@ public class P2MSUnlockBuilder extends UnlockingScriptBuilder{
                     signatures.add(TransactionSignature.fromTxFormat(chunks.get(i).data));
                 }
 
-            }catch(SignatureDecodeException ex){
+            } catch (SignatureDecodeException ex) {
                 throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR,
                         "Script parsing failed. Invalid signatures detected.");
             }
 
-        }else{
+        } else {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR,
                     "Invalid script or malformed script");
         }

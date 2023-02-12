@@ -35,50 +35,41 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
      * constants derive from it.
      */
     public static final int SMALLEST_UNIT_EXPONENT = 8;
-
-
-    /**
-     * The number of satoshis equal to one bitcoin.
-     */
-    private static final long COIN_VALUE = LongMath.pow(10, SMALLEST_UNIT_EXPONENT);
-
     /**
      * Zero Bitcoins.
      */
     public static final Coin ZERO = Coin.valueOf(0);
-
-    /**
-     * One Bitcoin.
-     */
-    public static final Coin COIN = Coin.valueOf(COIN_VALUE);
-
-    /**
-     * 0.01 Bitcoins. This unit is not really used much.
-     */
-    public static final Coin CENT = COIN.divide(100);
-
-    /**
-     * 0.001 Bitcoins, also known as 1 mBTC.
-     */
-    public static final Coin MILLICOIN = COIN.divide(1000);
-
-    /**
-     * 0.000001 Bitcoins, also known as 1 µBTC or 1 uBTC.
-     */
-    public static final Coin MICROCOIN = MILLICOIN.divide(1000);
-
     /**
      * A satoshi is the smallest unit that can be transferred. 100 million of them fit into a Bitcoin.
      */
     public static final Coin SATOSHI = Coin.valueOf(1);
-
-    public static final Coin FIFTY_COINS = COIN.multiply(50);
-
     /**
      * Represents a monetary value of minus one satoshi.
      */
     public static final Coin NEGATIVE_SATOSHI = Coin.valueOf(-1);
-
+    /**
+     * The number of satoshis equal to one bitcoin.
+     */
+    private static final long COIN_VALUE = LongMath.pow(10, SMALLEST_UNIT_EXPONENT);
+    /**
+     * One Bitcoin.
+     */
+    public static final Coin COIN = Coin.valueOf(COIN_VALUE);
+    /**
+     * 0.01 Bitcoins. This unit is not really used much.
+     */
+    public static final Coin CENT = COIN.divide(100);
+    /**
+     * 0.001 Bitcoins, also known as 1 mBTC.
+     */
+    public static final Coin MILLICOIN = COIN.divide(1000);
+    /**
+     * 0.000001 Bitcoins, also known as 1 µBTC or 1 uBTC.
+     */
+    public static final Coin MICROCOIN = MILLICOIN.divide(1000);
+    public static final Coin FIFTY_COINS = COIN.multiply(50);
+    private static final MonetaryFormat FRIENDLY_FORMAT = MonetaryFormat.BTC.minDecimals(2).repeatOptionalDecimals(1, 6).postfixCode();
+    private static final MonetaryFormat PLAIN_FORMAT = MonetaryFormat.BTC.minDecimals(0).repeatOptionalDecimals(1, 8).noCode();
     /**
      * The number of satoshis of this monetary value.
      */
@@ -92,19 +83,6 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
         return new Coin(satoshis);
     }
 
-    @Override
-    public int smallestUnitExponent() {
-        return SMALLEST_UNIT_EXPONENT;
-    }
-
-    /**
-     * Returns the number of satoshis of this monetary value.
-     */
-    @Override
-    public long getValue() {
-        return value;
-    }
-
     /**
      * Convert an amount expressed in the way humans are used to into satoshis.
      */
@@ -116,7 +94,8 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
         return coin;
     }
 
-    /**<p>
+    /**
+     * <p>
      * Parses an amount expressed in the way humans are used to.
      * </p>
      * This takes string in a format understood by {@link BigDecimal#BigDecimal(String)},
@@ -173,26 +152,14 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
         return Coin.valueOf(satoshis);
     }
 
-
-
-    /**
-     * Convert to number of bitcoin (in BTC)
-     *
-     * @return decimal number of bitcoin (in BTC)
-     */
-    public BigDecimal toBtc() {
-        return satoshiToBtc(this.value);
-    }
-
     /**
      * Create a {@code Coin} by parsing a {@code String} amount expressed in "the way humans are used to".
      * The amount is cut to satoshi precision.
      *
      * @param str string in a format understood by {@link BigDecimal#BigDecimal(String)}, for example "0", "1", "0.10",
-     *      * "1.23E3", "1234.5E-5".
+     *            * "1.23E3", "1234.5E-5".
      * @return {@code Coin} object containing value in satoshis
-     * @throws IllegalArgumentException
-     *             if you try to specify a value out of range.
+     * @throws IllegalArgumentException if you try to specify a value out of range.
      */
     public static Coin parseCoinInexact(final String str) {
         try {
@@ -203,11 +170,35 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
         }
     }
 
+    @Override
+    public int smallestUnitExponent() {
+        return SMALLEST_UNIT_EXPONENT;
+    }
+
+    /**
+     * Returns the number of satoshis of this monetary value.
+     */
+    @Override
+    public long getValue() {
+        return value;
+    }
+
+    /**
+     * Convert to number of bitcoin (in BTC)
+     *
+     * @return decimal number of bitcoin (in BTC)
+     */
+    public BigDecimal toBtc() {
+        return satoshiToBtc(this.value);
+    }
+
     public Coin add(final Coin value) {
         return new Coin(LongMath.checkedAdd(this.value, value.value));
     }
 
-    /** Alias for add */
+    /**
+     * Alias for add
+     */
     public Coin plus(final Coin value) {
         return add(value);
     }
@@ -216,7 +207,9 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
         return new Coin(LongMath.checkedSubtract(this.value, value.value));
     }
 
-    /** Alias for subtract */
+    /**
+     * Alias for subtract
+     */
     public Coin minus(final Coin value) {
         return subtract(value);
     }
@@ -225,12 +218,16 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
         return new Coin(LongMath.checkedMultiply(this.value, factor));
     }
 
-    /** Alias for multiply */
+    /**
+     * Alias for multiply
+     */
     public Coin times(final long factor) {
         return multiply(factor);
     }
 
-    /** Alias for multiply */
+    /**
+     * Alias for multiply
+     */
     public Coin times(final int factor) {
         return multiply(factor);
     }
@@ -239,18 +236,22 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
         return new Coin(this.value / divisor);
     }
 
-    /** Alias for divide */
+    /**
+     * Alias for divide
+     */
     public Coin div(final long divisor) {
         return divide(divisor);
     }
 
-    /** Alias for divide */
+    /**
+     * Alias for divide
+     */
     public Coin div(final int divisor) {
         return divide(divisor);
     }
 
     public Coin[] divideAndRemainder(final long divisor) {
-        return new Coin[] { new Coin(this.value / divisor), new Coin(this.value % divisor) };
+        return new Coin[]{new Coin(this.value / divisor), new Coin(this.value % divisor)};
     }
 
     public long divide(final Coin divisor) {
@@ -324,8 +325,6 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
         return this.value;
     }
 
-    private static final MonetaryFormat FRIENDLY_FORMAT = MonetaryFormat.BTC.minDecimals(2).repeatOptionalDecimals(1, 6).postfixCode();
-
     /**
      * Returns the value as a 0.12 type string. More digits after the decimal place will be used
      * if necessary, but two will always be present.
@@ -333,8 +332,6 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
     public String toFriendlyString() {
         return FRIENDLY_FORMAT.format(this).toString();
     }
-
-    private static final MonetaryFormat PLAIN_FORMAT = MonetaryFormat.BTC.minDecimals(0).repeatOptionalDecimals(1, 8).noCode();
 
     /**
      * <p>
@@ -356,7 +353,7 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
     public boolean equals(final Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        return this.value == ((Coin)o).value;
+        return this.value == ((Coin) o).value;
     }
 
     @Override

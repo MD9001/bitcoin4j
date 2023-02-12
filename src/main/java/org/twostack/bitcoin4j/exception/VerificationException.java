@@ -71,7 +71,7 @@ public class VerificationException extends RuntimeException {
     public static class BlockVersionOutOfDate extends VerificationException {
         public BlockVersionOutOfDate(final long version) {
             super("Block version #"
-                + version + " is outdated.");
+                    + version + " is outdated.");
         }
     }
 

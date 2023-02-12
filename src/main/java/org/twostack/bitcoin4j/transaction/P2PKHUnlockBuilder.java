@@ -24,8 +24,6 @@ import org.twostack.bitcoin4j.script.*;
 import java.util.List;
 
 public class P2PKHUnlockBuilder extends UnlockingScriptBuilder {
-
-
     private PublicKey signerPubkey;
 
     public P2PKHUnlockBuilder(Script script) throws SignatureDecodeException {
@@ -37,12 +35,11 @@ public class P2PKHUnlockBuilder extends UnlockingScriptBuilder {
     }
 
     private void parse(Script script) throws SignatureDecodeException {
-
         if (script != null) {
 
             List<ScriptChunk> chunkList = script.getChunks();
 
-            if (chunkList.size() != 2){
+            if (chunkList.size() != 2) {
                 throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Wrong number of data elements for P2PKH ScriptSig");
             }
 
@@ -52,7 +49,7 @@ public class P2PKHUnlockBuilder extends UnlockingScriptBuilder {
             signerPubkey = PublicKey.fromHex(Utils.HEX.encode(pubKey));
             signatures.add(TransactionSignature.fromTxFormat(Utils.HEX.encode(sig)));
 
-        }else{
+        } else {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Invalid Script or Malformed Script.");
         }
     }
@@ -67,14 +64,14 @@ public class P2PKHUnlockBuilder extends UnlockingScriptBuilder {
             signature = getSignatures().get(0);
         }
 
-        if (signature == null || signerPubkey == null){
+        if (signature == null || signerPubkey == null) {
             return new ScriptBuilder().build(); //return empty script; otherwise we will barf on early serialize (prior to signing)
         }
 
         try {
 
             return new ScriptBuilder().data(signature.toTxFormat()).data(signerPubkey.getPubKeyBytes()).build();
-        }catch(Exception ex){
+        } catch (Exception ex) {
             System.out.println(ex.getMessage());
             ex.printStackTrace(); //FIXME: Handle more gracefully
             return new ScriptBuilder().build();

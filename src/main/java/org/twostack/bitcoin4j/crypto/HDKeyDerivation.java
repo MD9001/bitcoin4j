@@ -33,6 +33,14 @@ import static com.google.common.base.Preconditions.checkState;
  * deterministic wallet child key generation algorithm.
  */
 public final class HDKeyDerivation {
+    /**
+     * Child derivation may fail (although with extremely low probability); in such case it is re-attempted.
+     * This is the maximum number of re-attempts (to avoid an infinite loop in case of bugs etc.).
+     */
+    public static final int MAX_CHILD_DERIVATION_ATTEMPTS = 100;
+    // Some arbitrary random number. Doesn't matter what it is.
+    private static final BigInteger RAND_INT;
+
     static {
         // Init proper random number generator, as some old Android installations have bugs that make it unsecure.
         if (Utils.isAndroidRuntime())
@@ -41,16 +49,8 @@ public final class HDKeyDerivation {
         RAND_INT = new BigInteger(256, new SecureRandom());
     }
 
-    // Some arbitrary random number. Doesn't matter what it is.
-    private static final BigInteger RAND_INT;
-
-    private HDKeyDerivation() { }
-
-    /**
-     * Child derivation may fail (although with extremely low probability); in such case it is re-attempted.
-     * This is the maximum number of re-attempts (to avoid an infinite loop in case of bugs etc.).
-     */
-    public static final int MAX_CHILD_DERIVATION_ATTEMPTS = 100;
+    private HDKeyDerivation() {
+    }
 
     /**
      * Generates a new deterministic key from the given seed, which can be any arbitrary byte array. However resist
@@ -58,7 +58,7 @@ public final class HDKeyDerivation {
      * broken by attackers (this is not theoretical, people have had money stolen that way). This method checks
      * that the given seed is at least 64 bits long.
      *
-     * @throws HDDerivationException if generated master key is invalid (private key not between 0 and n inclusive)
+     * @throws HDDerivationException    if generated master key is invalid (private key not between 0 and n inclusive)
      * @throws IllegalArgumentException if the seed is less than 8 bytes and could be brute forced
      */
     public static DeterministicKey createMasterPrivateKey(byte[] seed) throws HDDerivationException {
@@ -70,10 +70,10 @@ public final class HDKeyDerivation {
         checkState(i.length == 64, i.length);
         byte[] il = Arrays.copyOfRange(i, 0, 32);
         byte[] ir = Arrays.copyOfRange(i, 32, 64);
-        Arrays.fill(i, (byte)0);
+        Arrays.fill(i, (byte) 0);
         DeterministicKey masterPrivKey = createMasterPrivKeyFromBytes(il, ir);
-        Arrays.fill(il, (byte)0);
-        Arrays.fill(ir, (byte)0);
+        Arrays.fill(il, (byte) 0);
+        Arrays.fill(ir, (byte) 0);
         // Child deterministic keys will chain up to their parents to find the keys.
         masterPrivKey.setCreationTimeSeconds(Utils.currentTimeSeconds());
         return masterPrivKey;
@@ -117,7 +117,8 @@ public final class HDKeyDerivation {
             try {
                 child = new ChildNumber(child.num() + nAttempts, isHardened);
                 return deriveChildKey(parent, child);
-            } catch (HDDerivationException ignore) { }
+            } catch (HDDerivationException ignore) {
+            }
             nAttempts++;
         }
         throw new HDDerivationException("Maximum number of child derivation attempts reached, this is probably an indication of a bug.");
@@ -126,7 +127,7 @@ public final class HDKeyDerivation {
 
     /**
      * @throws HDDerivationException if private derivation is attempted for a public-only parent key, or
-     * if the resulting derived key is invalid (eg. private key == 0).
+     *                               if the resulting derived key is invalid (eg. private key == 0).
      */
     public static DeterministicKey deriveChildKey(DeterministicKey parent, ChildNumber childNumber) throws HDDerivationException {
         if (!parent.hasPrivKey())
@@ -143,7 +144,7 @@ public final class HDKeyDerivation {
     }
 
     public static RawKeyBytes deriveChildKeyBytesFromPrivate(DeterministicKey parent,
-                                                              ChildNumber childNumber) throws HDDerivationException {
+                                                             ChildNumber childNumber) throws HDDerivationException {
         checkArgument(parent.hasPrivKey(), "Parent key must have private key bytes for this method.");
         byte[] parentPublicKey = parent.getPubKeyPoint().getEncoded(true);
         checkState(parentPublicKey.length == 33, "Parent pubkey must be 33 bytes, but is " + parentPublicKey.length);
@@ -166,13 +167,8 @@ public final class HDKeyDerivation {
         return new RawKeyBytes(ki.toByteArray(), chainCode);
     }
 
-    public enum PublicDeriveMode {
-        NORMAL,
-        WITH_INVERSION
-    }
-
     public static DeterministicKey deriveChildKeyFromPublic(DeterministicKey parent, ChildNumber childNumber,
-            PublicDeriveMode mode) throws HDDerivationException {
+                                                            PublicDeriveMode mode) throws HDDerivationException {
         RawKeyBytes rawKey = deriveChildKeyBytesFromPublic(parent, childNumber, PublicDeriveMode.NORMAL);
         return new DeterministicKey(parent.getPath().extend(childNumber), rawKey.chainCode,
                 new LazyECPoint(ECKey.CURVE.getCurve(), rawKey.keyBytes), null, parent);
@@ -208,7 +204,8 @@ public final class HDKeyDerivation {
                 Ki = Ki.add(ECKey.publicPointFromPrivate(additiveInverse));
                 Ki = Ki.add(parent.getPubKeyPoint());
                 break;
-            default: throw new AssertionError();
+            default:
+                throw new AssertionError();
         }
 
         assertNonInfinity(Ki, "Illegal derived key: derived public key equals infinity.");
@@ -228,6 +225,11 @@ public final class HDKeyDerivation {
     private static void assertLessThanN(BigInteger integer, String errorMessage) {
         if (integer.compareTo(ECKey.CURVE.getN()) > 0)
             throw new HDDerivationException(errorMessage);
+    }
+
+    public enum PublicDeriveMode {
+        NORMAL,
+        WITH_INVERSION
     }
 
     public static class RawKeyBytes {

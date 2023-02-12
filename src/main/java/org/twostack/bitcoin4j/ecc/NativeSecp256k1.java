@@ -25,7 +25,7 @@ import java.nio.ByteOrder;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static org.twostack.bitcoin4j.ecc.NativeSecp256k1Util.*;
+import static org.twostack.bitcoin4j.ecc.NativeSecp256k1Util.AssertFailException;
 import static org.twostack.bitcoin4j.ecc.NativeSecp256k1Util.assertEquals;
 
 /**
@@ -44,15 +44,15 @@ public class NativeSecp256k1 {
     private static final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
     private static final Lock r = rwl.readLock();
     private static final Lock w = rwl.writeLock();
-    private static ThreadLocal<ByteBuffer> nativeECDSABuffer = new ThreadLocal<>();
+    private static final ThreadLocal<ByteBuffer> nativeECDSABuffer = new ThreadLocal<>();
 
     /**
      * Verifies the given secp256k1 signature in native code. Calling when enabled == false is undefined (probably
      * library not loaded)
      *
-     * @param data The data which was signed, must be exactly 32 bytes
+     * @param data      The data which was signed, must be exactly 32 bytes
      * @param signature The signature
-     * @param pub The public key which did the signing
+     * @param pub       The public key which did the signing
      */
     public static boolean verify(byte[] data, byte[] signature, byte[] pub) throws AssertFailException {
         Preconditions.checkArgument(data.length == 32 && signature.length <= 520 && pub.length <= 520);
@@ -80,7 +80,7 @@ public class NativeSecp256k1 {
      * libsecp256k1 Create an ECDSA signature.
      *
      * @param data Message hash, 32 bytes
-     * @param sec Secret key, 32 bytes
+     * @param sec  Secret key, 32 bytes
      * @return sig byte array of signature
      */
     public static byte[] sign(byte[] data, byte[] sec) throws AssertFailException {
@@ -106,8 +106,8 @@ public class NativeSecp256k1 {
         }
 
         byte[] sigArr = retByteArray[0];
-        int sigLen = new BigInteger(new byte[] { retByteArray[1][0] }).intValue();
-        int retVal = new BigInteger(new byte[] { retByteArray[1][1] }).intValue();
+        int sigLen = new BigInteger(new byte[]{retByteArray[1][0]}).intValue();
+        int retVal = new BigInteger(new byte[]{retByteArray[1][1]}).intValue();
 
         assertEquals(sigArr.length, sigLen, "Got bad signature length.");
 
@@ -168,8 +168,8 @@ public class NativeSecp256k1 {
         }
 
         byte[] pubArr = retByteArray[0];
-        int pubLen = new BigInteger(new byte[] { retByteArray[1][0] }).intValue();
-        int retVal = new BigInteger(new byte[] { retByteArray[1][1] }).intValue();
+        int pubLen = new BigInteger(new byte[]{retByteArray[1][0]}).intValue();
+        int retVal = new BigInteger(new byte[]{retByteArray[1][1]}).intValue();
 
         assertEquals(pubArr.length, pubLen, "Got bad pubkey length.");
 
@@ -201,7 +201,7 @@ public class NativeSecp256k1 {
     /**
      * libsecp256k1 PrivKey Tweak-Mul - Tweak privkey by multiplying to it
      *
-     * @param tweak some bytes to tweak with
+     * @param tweak   some bytes to tweak with
      * @param privkey 32-byte seckey
      */
     public static byte[] privKeyTweakMul(byte[] privkey, byte[] tweak) throws AssertFailException {
@@ -227,8 +227,8 @@ public class NativeSecp256k1 {
 
         byte[] privArr = retByteArray[0];
 
-        int privLen = (byte) new BigInteger(new byte[] { retByteArray[1][0] }).intValue() & 0xFF;
-        int retVal = new BigInteger(new byte[] { retByteArray[1][1] }).intValue();
+        int privLen = (byte) new BigInteger(new byte[]{retByteArray[1][0]}).intValue() & 0xFF;
+        int retVal = new BigInteger(new byte[]{retByteArray[1][1]}).intValue();
 
         assertEquals(privArr.length, privLen, "Got bad pubkey length.");
 
@@ -240,7 +240,7 @@ public class NativeSecp256k1 {
     /**
      * libsecp256k1 PrivKey Tweak-Add - Tweak privkey by adding to it
      *
-     * @param tweak some bytes to tweak with
+     * @param tweak   some bytes to tweak with
      * @param privkey 32-byte seckey
      */
     public static byte[] privKeyTweakAdd(byte[] privkey, byte[] tweak) throws AssertFailException {
@@ -266,8 +266,8 @@ public class NativeSecp256k1 {
 
         byte[] privArr = retByteArray[0];
 
-        int privLen = (byte) new BigInteger(new byte[] { retByteArray[1][0] }).intValue() & 0xFF;
-        int retVal = new BigInteger(new byte[] { retByteArray[1][1] }).intValue();
+        int privLen = (byte) new BigInteger(new byte[]{retByteArray[1][0]}).intValue() & 0xFF;
+        int retVal = new BigInteger(new byte[]{retByteArray[1][1]}).intValue();
 
         assertEquals(privArr.length, privLen, "Got bad pubkey length.");
 
@@ -279,7 +279,7 @@ public class NativeSecp256k1 {
     /**
      * libsecp256k1 PubKey Tweak-Add - Tweak pubkey by adding to it
      *
-     * @param tweak some bytes to tweak with
+     * @param tweak  some bytes to tweak with
      * @param pubkey 32-byte seckey
      */
     public static byte[] pubKeyTweakAdd(byte[] pubkey, byte[] tweak) throws AssertFailException {
@@ -305,8 +305,8 @@ public class NativeSecp256k1 {
 
         byte[] pubArr = retByteArray[0];
 
-        int pubLen = (byte) new BigInteger(new byte[] { retByteArray[1][0] }).intValue() & 0xFF;
-        int retVal = new BigInteger(new byte[] { retByteArray[1][1] }).intValue();
+        int pubLen = (byte) new BigInteger(new byte[]{retByteArray[1][0]}).intValue() & 0xFF;
+        int retVal = new BigInteger(new byte[]{retByteArray[1][1]}).intValue();
 
         assertEquals(pubArr.length, pubLen, "Got bad pubkey length.");
 
@@ -318,7 +318,7 @@ public class NativeSecp256k1 {
     /**
      * libsecp256k1 PubKey Tweak-Mul - Tweak pubkey by multiplying to it
      *
-     * @param tweak some bytes to tweak with
+     * @param tweak  some bytes to tweak with
      * @param pubkey 32-byte seckey
      */
     public static byte[] pubKeyTweakMul(byte[] pubkey, byte[] tweak) throws AssertFailException {
@@ -344,8 +344,8 @@ public class NativeSecp256k1 {
 
         byte[] pubArr = retByteArray[0];
 
-        int pubLen = (byte) new BigInteger(new byte[] { retByteArray[1][0] }).intValue() & 0xFF;
-        int retVal = new BigInteger(new byte[] { retByteArray[1][1] }).intValue();
+        int pubLen = (byte) new BigInteger(new byte[]{retByteArray[1][0]}).intValue() & 0xFF;
+        int retVal = new BigInteger(new byte[]{retByteArray[1][1]}).intValue();
 
         assertEquals(pubArr.length, pubLen, "Got bad pubkey length.");
 
@@ -382,7 +382,7 @@ public class NativeSecp256k1 {
         }
 
         byte[] resArr = retByteArray[0];
-        int retVal = new BigInteger(new byte[] { retByteArray[1][0] }).intValue();
+        int retVal = new BigInteger(new byte[]{retByteArray[1][0]}).intValue();
 
         assertEquals(resArr.length, 32, "Got bad result length.");
         assertEquals(retVal, 1, "Failed return value check.");
@@ -438,7 +438,7 @@ public class NativeSecp256k1 {
         }
 
         byte[] sigArr = retByteArray[0];
-        int retVal = new BigInteger(new byte[] { retByteArray[1][0] }).intValue();
+        int retVal = new BigInteger(new byte[]{retByteArray[1][0]}).intValue();
 
         assertEquals(sigArr.length, 64, "Got bad signature length.");
 

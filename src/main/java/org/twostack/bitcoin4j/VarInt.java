@@ -19,7 +19,6 @@ package org.twostack.bitcoin4j;
 
 import com.google.common.primitives.Ints;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -27,7 +26,9 @@ import java.io.InputStream;
  * A variable-length encoded unsigned integer using Satoshi's encoding (a.k.a. "CompactSize").
  */
 public class VarInt {
-    /** @deprecated use {{@link #intValue()} or {{@link #longValue()}}} */
+    /**
+     * @deprecated use {{@link #intValue()} or {{@link #longValue()}}}
+     */
     @Deprecated
     public final long value;
     private final int originallyEncodedSize;
@@ -45,7 +46,7 @@ public class VarInt {
     /**
      * Constructs a new VarInt with the value parsed from the specified offset of the given buffer.
      *
-     * @param buf the buffer containing the value
+     * @param buf    the buffer containing the value
      * @param offset the offset of the value
      */
     public VarInt(byte[] buf, int offset) {
@@ -81,6 +82,20 @@ public class VarInt {
         return new VarInt(value);
     }
 
+    /**
+     * Returns the minimum encoded size of the given unsigned long value.
+     *
+     * @param value the unsigned long value (beware widening conversion of negatives!)
+     */
+    public static int sizeOf(long value) {
+        // if negative, it's actually a very large unsigned long value
+        if (value < 0) return 9; // 1 marker + 8 data bytes
+        if (value < 253) return 1; // 1 data byte
+        if (value <= 0xFFFFL) return 3; // 1 marker + 2 data bytes
+        if (value <= 0xFFFFFFFFL) return 5; // 1 marker + 4 data bytes
+        return 9; // 1 marker + 8 data bytes
+    }
+
     public long longValue() {
         return value;
     }
@@ -102,20 +117,6 @@ public class VarInt {
      */
     public final int getSizeInBytes() {
         return sizeOf(value);
-    }
-
-    /**
-     * Returns the minimum encoded size of the given unsigned long value.
-     *
-     * @param value the unsigned long value (beware widening conversion of negatives!)
-     */
-    public static int sizeOf(long value) {
-        // if negative, it's actually a very large unsigned long value
-        if (value < 0) return 9; // 1 marker + 8 data bytes
-        if (value < 253) return 1; // 1 data byte
-        if (value <= 0xFFFFL) return 3; // 1 marker + 2 data bytes
-        if (value <= 0xFFFFFFFFL) return 5; // 1 marker + 4 data bytes
-        return 9; // 1 marker + 8 data bytes
     }
 
     /**
@@ -144,5 +145,8 @@ public class VarInt {
                 Utils.int64ToByteArrayLE(value, bytes, 1);
                 return bytes;
         }
+    }
+
+    public static void main(String[] args) {
     }
 }

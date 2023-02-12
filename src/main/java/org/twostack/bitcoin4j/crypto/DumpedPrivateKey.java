@@ -35,18 +35,26 @@ import java.util.Arrays;
  */
 public class DumpedPrivateKey extends PrefixedChecksummedBytes {
 
+    private DumpedPrivateKey(NetworkType networkType, byte[] bytes) {
+        super(networkType, bytes);
+        if (bytes.length != 32 && bytes.length != 33)
+            throw new AddressFormatException.InvalidDataLength(
+                    "Wrong number of bytes for a private key (32 or 33): " + bytes.length);
+    }
+
+    // Used by ECKey.getPrivateKeyEncoded()
+    public DumpedPrivateKey(NetworkType networkType, byte[] keyBytes, boolean compressed) {
+        this(networkType, encode(keyBytes, compressed));
+    }
+
     /**
      * Construct a private key from its Base58 representation.
-     * @param networkType
-     *            The expected NetworkParameters or null if you don't want validation.
-     * @param base58
-     *            The textual form of the private key.
-     * @throws AddressFormatException
-     *             if the given base58 doesn't parse or the checksum is invalid
-     * @throws AddressFormatException.WrongNetwork
-     *             if the given private key is valid but for a different chain (eg testnet vs mainnet)
      *
+     * @param networkType The expected NetworkParameters or null if you don't want validation.
+     * @param base58      The textual form of the private key.
      * @return a private key
+     * @throws AddressFormatException              if the given base58 doesn't parse or the checksum is invalid
+     * @throws AddressFormatException.WrongNetwork if the given private key is valid but for a different chain (eg testnet vs mainnet)
      */
     public static DumpedPrivateKey fromBase58(@Nullable NetworkType networkType, String base58)
             throws AddressFormatException, AddressFormatException.WrongNetwork {
@@ -65,27 +73,6 @@ public class DumpedPrivateKey extends PrefixedChecksummedBytes {
         }
     }
 
-    private DumpedPrivateKey(NetworkType networkType, byte[] bytes) {
-        super(networkType, bytes);
-        if (bytes.length != 32 && bytes.length != 33)
-            throw new AddressFormatException.InvalidDataLength(
-                    "Wrong number of bytes for a private key (32 or 33): " + bytes.length);
-    }
-
-    // Used by ECKey.getPrivateKeyEncoded()
-    public DumpedPrivateKey(NetworkType networkType, byte[] keyBytes, boolean compressed) {
-        this(networkType, encode(keyBytes, compressed));
-    }
-
-    /**
-     * Returns the base58-encoded textual form, including version and checksum bytes.
-     * 
-     * @return textual form
-     */
-    public String toBase58() {
-        return Base58.encodeChecked(NetworkParameters.getDumpedPrivateKeyHeader(networkType), bytes);
-    }
-
     private static byte[] encode(byte[] keyBytes, boolean compressed) {
         Preconditions.checkArgument(keyBytes.length == 32, "Private keys must be 32 bytes");
         if (!compressed) {
@@ -97,6 +84,15 @@ public class DumpedPrivateKey extends PrefixedChecksummedBytes {
             bytes[32] = 1;
             return bytes;
         }
+    }
+
+    /**
+     * Returns the base58-encoded textual form, including version and checksum bytes.
+     *
+     * @return textual form
+     */
+    public String toBase58() {
+        return Base58.encodeChecked(NetworkParameters.getDumpedPrivateKeyHeader(networkType), bytes);
     }
 
     /**

@@ -34,7 +34,9 @@ public class BriefLogFormatter extends Formatter {
     // keep a reference to our custom logger around.
     private static final Logger logger = Logger.getLogger("");
 
-    /** Configures JDK logging to use this class for everything. */
+    /**
+     * Configures JDK logging to use this class for everything.
+     */
     public static void init() {
         final Handler[] handlers = logger.getHandlers();
         // In regular Java there is always a handler. Avian doesn't install one however.

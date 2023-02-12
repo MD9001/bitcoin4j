@@ -18,16 +18,15 @@
 
 package org.twostack.bitcoin4j.script;
 
+import org.twostack.bitcoin4j.Address;
 import org.twostack.bitcoin4j.ECKey;
 import org.twostack.bitcoin4j.Utils;
-import org.twostack.bitcoin4j.Address;
 import org.twostack.bitcoin4j.address.LegacyAddress;
 import org.twostack.bitcoin4j.script.Script.ScriptType;
 
 import java.util.*;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkState;
 import static org.twostack.bitcoin4j.script.ScriptOpCodes.*;
 
 /**
@@ -36,39 +35,147 @@ import static org.twostack.bitcoin4j.script.ScriptOpCodes.*;
 public class ScriptBuilder {
     private final List<ScriptChunk> chunks;
 
-    /** Creates a fresh ScriptBuilder with an empty program. */
+    /**
+     * Creates a fresh ScriptBuilder with an empty program.
+     */
     public ScriptBuilder() {
         chunks = new LinkedList<>();
     }
 
-    /** Creates a fresh ScriptBuilder with the given program as the starting point. */
+    /**
+     * Creates a fresh ScriptBuilder with the given program as the starting point.
+     */
     public ScriptBuilder(Script template) {
         chunks = new ArrayList<>(template.getChunks());
     }
 
-    /** Adds the given chunk to the end of the program */
+    /**
+     * Creates an empty script.
+     */
+    public static Script createEmpty() {
+        return new ScriptBuilder().build();
+    }
+
+    /**
+     * Creates a scriptPubKey that encodes payment to the given address.
+     */
+    public static Script createOutputScript(Address to) {
+        if (to instanceof LegacyAddress) {
+            ScriptType scriptType = to.getOutputScriptType();
+            if (scriptType == ScriptType.P2PKH)
+                return createP2PKHOutputScript(to.getHash());
+            else if (scriptType == ScriptType.P2SH)
+                return createP2SHOutputScript(to.getHash());
+            else
+                throw new IllegalStateException("Cannot handle " + scriptType);
+        } else {
+            throw new IllegalStateException("Cannot handle " + to);
+        }
+    }
+
+    /**
+     * Creates a scriptPubKey that encodes payment to the given raw public key.
+     */
+    public static Script createP2PKOutputScript(byte[] pubKey) {
+        return new ScriptBuilder().data(pubKey).op(OP_CHECKSIG).build();
+    }
+
+    /**
+     * Creates a scriptPubKey that encodes payment to the given raw public key.
+     */
+    public static Script createP2PKOutputScript(ECKey pubKey) {
+        return createP2PKOutputScript(pubKey.getPubKey());
+    }
+
+    /**
+     * Creates a scriptPubKey that sends to the given public key hash.
+     */
+    public static Script createP2PKHOutputScript(byte[] hash) {
+        checkArgument(hash.length == LegacyAddress.LENGTH);
+        ScriptBuilder builder = new ScriptBuilder();
+        builder.op(OP_DUP);
+        builder.op(OP_HASH160);
+        builder.data(hash);
+        builder.op(OP_EQUALVERIFY);
+        builder.op(OP_CHECKSIG);
+        return builder.build();
+    }
+
+    /**
+     * Creates a scriptPubKey that sends to the given public key.
+     */
+    public static Script createP2PKHOutputScript(ECKey key) {
+        checkArgument(key.isCompressed());
+        return createP2PKHOutputScript(key.getPubKeyHash());
+    }
+
+    /**
+     * Creates a scriptPubKey that sends to the given script hash. Read
+     * <a href="https://github.com/bitcoin/bips/blob/master/bip-0016.mediawiki">BIP 16</a> to learn more about this
+     * kind of script.
+     *
+     * @param hash The hash of the redeem script
+     * @return an output script that sends to the redeem script
+     */
+    public static Script createP2SHOutputScript(byte[] hash) {
+        checkArgument(hash.length == 20);
+        return new ScriptBuilder().op(OP_HASH160).data(hash).op(OP_EQUAL).build();
+    }
+
+    /**
+     * Creates a scriptPubKey for a given redeem script.
+     *
+     * @param redeemScript The redeem script
+     * @return an output script that sends to the redeem script
+     */
+    public static Script createP2SHOutputScript(Script redeemScript) {
+        byte[] hash = Utils.sha256hash160(redeemScript.getProgram());
+        return ScriptBuilder.createP2SHOutputScript(hash);
+    }
+
+    /**
+     * Creates a script of the form OP_RETURN [data]. This feature allows you to attach a small piece of data (like
+     * a hash of something stored elsewhere) to a zero valued output which can never be spent and thus does not pollute
+     * the ledger.
+     */
+    public static Script createOpReturnScript(byte[] data) {
+        checkArgument(data.length <= 80);
+        return new ScriptBuilder().op(OP_RETURN).data(data).build();
+    }
+
+    /**
+     * Adds the given chunk to the end of the program
+     */
     public ScriptBuilder addChunk(ScriptChunk chunk) {
         return addChunk(chunks.size(), chunk);
     }
 
-    /** Adds the given chunk at the given index in the program */
+    /**
+     * Adds the given chunk at the given index in the program
+     */
     public ScriptBuilder addChunk(int index, ScriptChunk chunk) {
         chunks.add(index, chunk);
         return this;
     }
 
-    /** Adds the given opcode to the end of the program. */
+    /**
+     * Adds the given opcode to the end of the program.
+     */
     public ScriptBuilder op(int opcode) {
         return op(chunks.size(), opcode);
     }
 
-    /** Adds the given opcode to the given index in the program */
+    /**
+     * Adds the given opcode to the given index in the program
+     */
     public ScriptBuilder op(int index, int opcode) {
         checkArgument(opcode == OP_FALSE || opcode > OP_PUSHDATA4);
         return addChunk(index, new ScriptChunk(opcode, null));
     }
 
-    /** Adds a copy of the given byte array as a data element (i.e. PUSHDATA) at the end of the program. */
+    /**
+     * Adds a copy of the given byte array as a data element (i.e. PUSHDATA) at the end of the program.
+     */
     public ScriptBuilder data(byte[] data) {
         if (data.length == 0)
             return smallNum(0);
@@ -76,7 +183,9 @@ public class ScriptBuilder {
             return data(chunks.size(), data);
     }
 
-    /** Adds a copy of the given byte array as a data element (i.e. PUSHDATA) at the given index in the program. */
+    /**
+     * Adds a copy of the given byte array as a data element (i.e. PUSHDATA) at the given index in the program.
+     */
     public ScriptBuilder data(int index, byte[] data) {
         // implements BIP62
         byte[] copy = Arrays.copyOf(data, data.length);
@@ -126,18 +235,19 @@ public class ScriptBuilder {
     /**
      * Adds the given number as a OP_N opcode to the end of the program.
      * Only handles values 0-16 inclusive.
-     * 
+     *
      * @see #number(long)
      */
     public ScriptBuilder smallNum(int num) {
         return smallNum(chunks.size(), num);
     }
 
-    /** Adds the given number as a push data chunk.
+    /**
+     * Adds the given number as a push data chunk.
      * This is intended to use for negative numbers or values greater than 16, and although
      * it will accept numbers in the range 0-16 inclusive, the encoding would be
      * considered non-standard.
-     * 
+     *
      * @see #number(long)
      */
     protected ScriptBuilder bigNum(long num) {
@@ -147,7 +257,7 @@ public class ScriptBuilder {
     /**
      * Adds the given number as a OP_N opcode to the given index in the program.
      * Only handles values 0-16 inclusive.
-     * 
+     *
      * @see #number(long)
      */
     public ScriptBuilder smallNum(int index, int num) {
@@ -161,7 +271,7 @@ public class ScriptBuilder {
      * This is intended to use for negative numbers or values greater than 16, and although
      * it will accept numbers in the range 0-16 inclusive, the encoding would be
      * considered non-standard.
-     * 
+     *
      * @see #number(long)
      */
     protected ScriptBuilder bigNum(int index, long num) {
@@ -203,6 +313,7 @@ public class ScriptBuilder {
 
     /**
      * Adds true to the end of the program.
+     *
      * @return this
      */
     public ScriptBuilder opTrue() {
@@ -211,6 +322,7 @@ public class ScriptBuilder {
 
     /**
      * Adds true to the given index in the program.
+     *
      * @param index at which insert true
      * @return this
      */
@@ -220,6 +332,7 @@ public class ScriptBuilder {
 
     /**
      * Adds false to the end of the program.
+     *
      * @return this
      */
     public ScriptBuilder opFalse() {
@@ -228,6 +341,7 @@ public class ScriptBuilder {
 
     /**
      * Adds false to the given index in the program.
+     *
      * @param index at which insert true
      * @return this
      */
@@ -235,96 +349,10 @@ public class ScriptBuilder {
         return number(index, 0); // push OP_0/OP_FALSE
     }
 
-    /** Creates a new immutable Script based on the state of the builder. */
+    /**
+     * Creates a new immutable Script based on the state of the builder.
+     */
     public Script build() {
         return new Script(chunks);
-    }
-
-    /** Creates an empty script. */
-    public static Script createEmpty() {
-        return new ScriptBuilder().build();
-    }
-
-    /** Creates a scriptPubKey that encodes payment to the given address. */
-    public static Script createOutputScript(Address to) {
-        if (to instanceof LegacyAddress) {
-            ScriptType scriptType = to.getOutputScriptType();
-            if (scriptType == ScriptType.P2PKH)
-                return createP2PKHOutputScript(to.getHash());
-            else if (scriptType == ScriptType.P2SH)
-                return createP2SHOutputScript(to.getHash());
-            else
-                throw new IllegalStateException("Cannot handle " + scriptType);
-        } else {
-            throw new IllegalStateException("Cannot handle " + to);
-        }
-    }
-
-    /** Creates a scriptPubKey that encodes payment to the given raw public key. */
-    public static Script createP2PKOutputScript(byte[] pubKey) {
-        return new ScriptBuilder().data(pubKey).op(OP_CHECKSIG).build();
-    }
-
-    /** Creates a scriptPubKey that encodes payment to the given raw public key. */
-    public static Script createP2PKOutputScript(ECKey pubKey) {
-        return createP2PKOutputScript(pubKey.getPubKey());
-    }
-
-    /**
-     * Creates a scriptPubKey that sends to the given public key hash.
-     */
-    public static Script createP2PKHOutputScript(byte[] hash) {
-        checkArgument(hash.length == LegacyAddress.LENGTH);
-        ScriptBuilder builder = new ScriptBuilder();
-        builder.op(OP_DUP);
-        builder.op(OP_HASH160);
-        builder.data(hash);
-        builder.op(OP_EQUALVERIFY);
-        builder.op(OP_CHECKSIG);
-        return builder.build();
-    }
-
-    /**
-     * Creates a scriptPubKey that sends to the given public key.
-     */
-    public static Script createP2PKHOutputScript(ECKey key) {
-        checkArgument(key.isCompressed());
-        return createP2PKHOutputScript(key.getPubKeyHash());
-    }
-
-
-    /**
-     * Creates a scriptPubKey that sends to the given script hash. Read
-     * <a href="https://github.com/bitcoin/bips/blob/master/bip-0016.mediawiki">BIP 16</a> to learn more about this
-     * kind of script.
-     *
-     * @param hash The hash of the redeem script
-     * @return an output script that sends to the redeem script
-     */
-    public static Script createP2SHOutputScript(byte[] hash) {
-        checkArgument(hash.length == 20);
-        return new ScriptBuilder().op(OP_HASH160).data(hash).op(OP_EQUAL).build();
-    }
-
-    /**
-     * Creates a scriptPubKey for a given redeem script.
-     *
-     * @param redeemScript The redeem script
-     * @return an output script that sends to the redeem script
-     */
-    public static Script createP2SHOutputScript(Script redeemScript) {
-        byte[] hash = Utils.sha256hash160(redeemScript.getProgram());
-        return ScriptBuilder.createP2SHOutputScript(hash);
-    }
-
-
-    /**
-     * Creates a script of the form OP_RETURN [data]. This feature allows you to attach a small piece of data (like
-     * a hash of something stored elsewhere) to a zero valued output which can never be spent and thus does not pollute
-     * the ledger.
-     */
-    public static Script createOpReturnScript(byte[] data) {
-        checkArgument(data.length <= 80);
-        return new ScriptBuilder().op(OP_RETURN).data(data).build();
     }
 }

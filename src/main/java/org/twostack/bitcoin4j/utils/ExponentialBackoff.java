@@ -29,10 +29,48 @@ public class ExponentialBackoff implements Comparable<ExponentialBackoff> {
     public static final int DEFAULT_INITIAL_MILLIS = 100;
     public static final float DEFAULT_MULTIPLIER = 1.1f;
     public static final int DEFAULT_MAXIMUM_MILLIS = 30 * 1000;
-
+    private final Params params;
     private float backoff;
     private long retryTime;
-    private final Params params;
+
+    public ExponentialBackoff(Params params) {
+        this.params = params;
+        trackSuccess();
+    }
+
+    /**
+     * Track a success - reset back off interval to the initial value
+     */
+    public final void trackSuccess() {
+        backoff = params.initial;
+        retryTime = Utils.currentTimeMillis();
+    }
+
+    /**
+     * Track a failure - multiply the back off interval by the multiplier
+     */
+    public void trackFailure() {
+        retryTime = Utils.currentTimeMillis() + (long) backoff;
+        backoff = Math.min(backoff * params.multiplier, params.maximum);
+    }
+
+    /**
+     * Get the next time to retry, in milliseconds since the epoch
+     */
+    public long getRetryTime() {
+        return retryTime;
+    }
+
+    @Override
+    public int compareTo(ExponentialBackoff other) {
+        // note that in this implementation compareTo() is not consistent with equals()
+        return Long.compare(retryTime, other.retryTime);
+    }
+
+    @Override
+    public String toString() {
+        return "ExponentialBackoff retry=" + retryTime + " backoff=" + backoff;
+    }
 
     /**
      * Parameters to configure a particular kind of exponential backoff.
@@ -44,7 +82,7 @@ public class ExponentialBackoff implements Comparable<ExponentialBackoff> {
 
         /**
          * @param initialMillis the initial interval to wait, in milliseconds
-         * @param multiplier the multiplier to apply on each failure
+         * @param multiplier    the multiplier to apply on each failure
          * @param maximumMillis the maximum interval to wait, in milliseconds
          */
         public Params(long initialMillis, float multiplier, long maximumMillis) {
@@ -64,38 +102,5 @@ public class ExponentialBackoff implements Comparable<ExponentialBackoff> {
             multiplier = DEFAULT_MULTIPLIER;
             maximum = DEFAULT_MAXIMUM_MILLIS;
         }
-    }
-
-    public ExponentialBackoff(Params params) {
-        this.params = params;
-        trackSuccess();
-    }
-
-    /** Track a success - reset back off interval to the initial value */
-    public final void trackSuccess() {
-        backoff = params.initial;
-        retryTime = Utils.currentTimeMillis();
-    }
-
-    /** Track a failure - multiply the back off interval by the multiplier */
-    public void trackFailure() {
-        retryTime = Utils.currentTimeMillis() + (long)backoff;
-        backoff = Math.min(backoff * params.multiplier, params.maximum);
-    }
-
-    /** Get the next time to retry, in milliseconds since the epoch */
-    public long getRetryTime() {
-        return retryTime;
-    }
-
-    @Override
-    public int compareTo(ExponentialBackoff other) {
-        // note that in this implementation compareTo() is not consistent with equals()
-        return Long.compare(retryTime, other.retryTime);
-    }
-
-    @Override
-    public String toString() {
-        return "ExponentialBackoff retry=" + retryTime + " backoff=" + backoff;
     }
 }

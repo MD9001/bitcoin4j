@@ -16,8 +16,8 @@
  */
 package org.twostack.bitcoin4j.transaction;
 
-import org.twostack.bitcoin4j.PublicKey;
 import org.twostack.bitcoin4j.Address;
+import org.twostack.bitcoin4j.PublicKey;
 import org.twostack.bitcoin4j.params.NetworkAddressType;
 import org.twostack.bitcoin4j.script.*;
 
@@ -25,18 +25,13 @@ import java.util.List;
 
 import static org.twostack.bitcoin4j.script.ScriptOpCodes.*;
 
-public class P2PKHLockBuilder extends LockingScriptBuilder{
+public class P2PKHLockBuilder extends LockingScriptBuilder {
 
 
     private Address address;
     private byte[] pubkeyHash;
 
-    static P2PKHLockBuilder fromPublicKey(PublicKey key, NetworkAddressType networkType){
-        Address address = Address.fromKey(networkType, key);
-        return new P2PKHLockBuilder(address);
-    }
-
-    public P2PKHLockBuilder(Address address){
+    public P2PKHLockBuilder(Address address) {
         this.address = address;
 
         if (address != null) {
@@ -44,30 +39,35 @@ public class P2PKHLockBuilder extends LockingScriptBuilder{
         }
     }
 
-    public P2PKHLockBuilder(Script script){
+    public P2PKHLockBuilder(Script script) {
         parse(script);
     }
 
-    private void parse(Script script){
+    static P2PKHLockBuilder fromPublicKey(PublicKey key, NetworkAddressType networkType) {
+        Address address = Address.fromKey(networkType, key);
+        return new P2PKHLockBuilder(address);
+    }
+
+    private void parse(Script script) {
 
         if (script != null) {
 
             List<ScriptChunk> chunkList = script.getChunks();
 
-            if (chunkList.size() != 5){
-                throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR,"Wrong number of data elements for P2PKH ScriptPubkey");
+            if (chunkList.size() != 5) {
+                throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Wrong number of data elements for P2PKH ScriptPubkey");
             }
 
-            if(!(   chunkList.get(0).opcode == ScriptOpCodes.OP_DUP &&
+            if (!(chunkList.get(0).opcode == ScriptOpCodes.OP_DUP &&
                     chunkList.get(1).opcode == ScriptOpCodes.OP_HASH160 &&
                     chunkList.get(3).opcode == ScriptOpCodes.OP_EQUALVERIFY &&
-                    chunkList.get(4).opcode == ScriptOpCodes.OP_CHECKSIG )){
+                    chunkList.get(4).opcode == ScriptOpCodes.OP_CHECKSIG)) {
                 throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Malformed P2PKH ScriptPubkey script. Mismatched OP_CODES.");
             }
 
             this.pubkeyHash = chunkList.get(2).data;
 
-        }else{
+        } else {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Invalid Script or Malformed Script.");
         }
     }

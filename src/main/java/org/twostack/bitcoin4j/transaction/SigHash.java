@@ -16,8 +16,10 @@
  */
 package org.twostack.bitcoin4j.transaction;
 
-import at.favre.lib.bytes.Bytes;
-import org.twostack.bitcoin4j.*;
+import org.twostack.bitcoin4j.Coin;
+import org.twostack.bitcoin4j.Sha256Hash;
+import org.twostack.bitcoin4j.Utils;
+import org.twostack.bitcoin4j.VarInt;
 import org.twostack.bitcoin4j.exception.SigHashException;
 import org.twostack.bitcoin4j.script.Script;
 import org.twostack.bitcoin4j.script.ScriptBuilder;
@@ -28,7 +30,6 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -62,10 +63,10 @@ public class SigHash {
      *
      * @param unsignedTxn - The transaction to calculate the signature has for
      * @param sigHashType - The bitwise combination of [SighashType] flags
-     * @param inputIndex -  The input index in [txn] that the hash applies to
-     * @param subscript - The portion of [Script] in the [TransactionOutput] of Spent [Transaction]
-     *                   (after OP_CODESEPARATOR) that will be covered by the signature.
-     * @param amount  - Amount in Satoshis. Used as part of ForkId calculation. Can be ZERO.
+     * @param inputIndex  -  The input index in [txn] that the hash applies to
+     * @param subscript   - The portion of [Script] in the [TransactionOutput] of Spent [Transaction]
+     *                    (after OP_CODESEPARATOR) that will be covered by the signature.
+     * @param amount      - Amount in Satoshis. Used as part of ForkId calculation. Can be ZERO.
      */
     public byte[] createHash(Transaction unsignedTxn, int sigHashType, int inputIndex, Script subscript, BigInteger amount) throws IOException, SigHashException {
         /// [flags]       - The bitwise combination of [ScriptFlags] related to Sighash. Applies to BSV and BCH only,
@@ -111,12 +112,12 @@ public class SigHash {
                 (sigHashType & 31) == SigHashType.SINGLE.value) {
             // clear all sequenceNumbers
             int ndx = 0;
-            for(TransactionInput input : txnCopy.getInputs()){
-                if (ndx != inputIndex ) {
+            for (TransactionInput input : txnCopy.getInputs()) {
+                if (ndx != inputIndex) {
                     txnCopy.getInputs().get(ndx).setSequenceNumber(0);
                 }
                 ndx++;
-            };
+            }
         }
 
         if ((sigHashType & 31) == SigHashType.NONE.value) {
@@ -143,13 +144,13 @@ public class SigHash {
             txnCopy.clearOutputs(); //remove all the outputs
             txnCopy.addOutputs(replacementOutputs);
             //create new outputs up to inputIndex + 1
-            for (int ndx = 0; ndx < inputIndex ; ndx++) {
+            for (int ndx = 0; ndx < inputIndex; ndx++) {
                 TransactionOutput output = new TransactionOutput(BigInteger.valueOf(Coin.NEGATIVE_SATOSHI.value), new ScriptBuilder().build());
                 txnCopy.replaceOutput(ndx, output);
             }
 
             // The signature isn't broken by new versions of the transaction issued by other parties.
-            for (int i = 0; i < txnCopy.getInputs().size(); i++){
+            for (int i = 0; i < txnCopy.getInputs().size(); i++) {
                 if (i != inputIndex)
                     txnCopy.getInputs().get(i).setSequenceNumber(0);
             }
@@ -164,7 +165,7 @@ public class SigHash {
 
         //inline getHash()
 
-        byte[] txnBytes= txnCopy.serialize(); //our copy of
+        byte[] txnBytes = txnCopy.serialize(); //our copy of
 
         WriteUtils writer = new WriteUtils();
         writer.writeBytes(txnBytes, txnBytes.length);
@@ -182,7 +183,7 @@ public class SigHash {
      */
     public byte[] getSighashPreimage(Transaction unsignedTxn, int sigHashType, int inputIndex, Script subscript, BigInteger amount) throws IOException, SigHashException {
 
-    /// [flags]       - The bitwise combination of [ScriptFlags] related to Sighash. Applies to BSV and BCH only,
+        /// [flags]       - The bitwise combination of [ScriptFlags] related to Sighash. Applies to BSV and BCH only,
         ///                 and refers to `ENABLE_SIGHASH_FORKID` and `ENABLE_REPLAY_PROTECTION`
         ///
         long flags = ENABLE_SIGHASH_FORKID;
@@ -225,12 +226,12 @@ public class SigHash {
                 (sigHashType & 31) == SigHashType.SINGLE.value) {
             // clear all sequenceNumbers
             int ndx = 0;
-            for(TransactionInput input : txnCopy.getInputs()){
-                if (ndx != inputIndex ) {
+            for (TransactionInput input : txnCopy.getInputs()) {
+                if (ndx != inputIndex) {
                     txnCopy.getInputs().get(ndx).setSequenceNumber(0);
                 }
                 ndx++;
-            };
+            }
         }
 
         if ((sigHashType & 31) == SigHashType.NONE.value) {
@@ -258,13 +259,13 @@ public class SigHash {
             txnCopy.clearOutputs(); //remove all the outputs
             txnCopy.addOutputs(replacementOutputs);
             //create new outputs up to inputIndex + 1
-            for (int ndx = 0; ndx < inputIndex ; ndx++) {
+            for (int ndx = 0; ndx < inputIndex; ndx++) {
                 TransactionOutput output = new TransactionOutput(BigInteger.valueOf(Coin.NEGATIVE_SATOSHI.value), new ScriptBuilder().build());
                 txnCopy.replaceOutput(ndx, output);
             }
 
             // The signature isn't broken by new versions of the transaction issued by other parties.
-            for (int i = 0; i < txnCopy.getInputs().size(); i++){
+            for (int i = 0; i < txnCopy.getInputs().size(); i++) {
                 if (i != inputIndex)
                     txnCopy.getInputs().get(i).setSequenceNumber(0);
             }
@@ -279,7 +280,7 @@ public class SigHash {
 
         //inline getHash()
 
-        byte[] txnBytes= txnCopy.serialize(); //our copy of
+        byte[] txnBytes = txnCopy.serialize(); //our copy of
 
         WriteUtils writer = new WriteUtils();
         writer.writeBytes(txnBytes, txnBytes.length);
@@ -292,11 +293,10 @@ public class SigHash {
 
 
     /**
-     *
-     Concatenation of Funding-Transaction's TransactioID and the
-     index of the output we are spending. I.e.
-     PrevTxID+OutputIndex
-     This acts as a unique pointer to the UTXO we are spending from
+     * Concatenation of Funding-Transaction's TransactioID and the
+     * index of the output we are spending. I.e.
+     * PrevTxID+OutputIndex
+     * This acts as a unique pointer to the UTXO we are spending from
      *
      * @param tx - Current Transaction we are building (Spending Transaction)
      * @return Returns a double-sha256 hash value of the (TxID+OutputIndex) from the Funding Transaction
@@ -305,7 +305,7 @@ public class SigHash {
     private byte[] getPrevoutHash(Transaction tx) throws IOException {
         WriteUtils writer = new WriteUtils();
 
-        for (TransactionInput input: tx.getInputs()){
+        for (TransactionInput input : tx.getInputs()) {
             byte[] prevTxId = Utils.reverseBytes(input.getPrevTxnId());
             writer.writeBytes(prevTxId, prevTxId.length);
             writer.writeUint32LE(input.getPrevTxnOutputIndex());
@@ -319,7 +319,7 @@ public class SigHash {
     private byte[] getSequenceHash(Transaction tx) throws IOException {
         WriteUtils writer = new WriteUtils();
 
-        for (TransactionInput input: tx.getInputs()) {
+        for (TransactionInput input : tx.getInputs()) {
             writer.writeUint32LE(input.getSequenceNumber());
         }
 
@@ -327,11 +327,11 @@ public class SigHash {
         return Sha256Hash.hashTwice(buf);
     }
 
-    private byte[] getOutputsHash(Transaction tx, @Nullable Integer n ) throws IOException {
+    private byte[] getOutputsHash(Transaction tx, @Nullable Integer n) throws IOException {
         WriteUtils writer = new WriteUtils();
 
         if (n == null) {
-            for(TransactionOutput output : tx.getOutputs()) {
+            for (TransactionOutput output : tx.getOutputs()) {
                 byte[] outputBytes = output.serialize();
                 writer.writeBytes(outputBytes, outputBytes.length);
             }
@@ -347,7 +347,7 @@ public class SigHash {
 
     private byte[] sigHashForForkid(Transaction txnCopy, int sigHashType, int inputIndex, Script subscriptCopy, BigInteger satoshis) throws SigHashException, IOException {
 
-        if (satoshis == null){
+        if (satoshis == null) {
             throw new SigHashException("For ForkId=0 signatures, satoshis or complete input must be provided");
         }
 

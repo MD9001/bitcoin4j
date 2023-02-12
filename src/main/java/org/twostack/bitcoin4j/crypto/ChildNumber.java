@@ -39,7 +39,9 @@ public class ChildNumber implements Comparable<ChildNumber> {
     public static final ChildNumber ONE = new ChildNumber(1);
     public static final ChildNumber ONE_HARDENED = new ChildNumber(1, true);
 
-    /** Integer i as per BIP 32 spec, including the MSB denoting derivation type (0 = public, 1 = private) **/
+    /**
+     * Integer i as per BIP 32 spec, including the MSB denoting derivation type (0 = public, 1 = private)
+     **/
     private final int i;
 
     public ChildNumber(int childNumber, boolean isHardened) {
@@ -52,23 +54,31 @@ public class ChildNumber implements Comparable<ChildNumber> {
         this.i = i;
     }
 
-    /** Returns the uint32 encoded form of the path element, including the most significant bit. */
+    private static boolean hasHardenedBit(int a) {
+        return (a & HARDENED_BIT) != 0;
+    }
+
+    /**
+     * Returns the uint32 encoded form of the path element, including the most significant bit.
+     */
     public int getI() {
         return i;
     }
 
-    /** Returns the uint32 encoded form of the path element, including the most significant bit. */
-    public int i() { return i; }
+    /**
+     * Returns the uint32 encoded form of the path element, including the most significant bit.
+     */
+    public int i() {
+        return i;
+    }
 
     public boolean isHardened() {
         return hasHardenedBit(i);
     }
 
-    private static boolean hasHardenedBit(int a) {
-        return (a & HARDENED_BIT) != 0;
-    }
-
-    /** Returns the child number without the hardening bit set (i.e. index in that part of the tree). */
+    /**
+     * Returns the child number without the hardening bit set (i.e. index in that part of the tree).
+     */
     public int num() {
         return i & (~HARDENED_BIT);
     }
@@ -82,7 +92,7 @@ public class ChildNumber implements Comparable<ChildNumber> {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        return i == ((ChildNumber)o).i;
+        return i == ((ChildNumber) o).i;
     }
 
     @Override

@@ -1,6 +1,6 @@
 /*
  * Copyright by the original author or authors.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -21,9 +21,12 @@ import javax.annotation.Nullable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
-/** Thread factory whose threads are marked as daemon and won't prevent process exit. */
+/**
+ * Thread factory whose threads are marked as daemon and won't prevent process exit.
+ */
 public class DaemonThreadFactory implements ThreadFactory {
-    @Nullable private final String name;
+    @Nullable
+    private final String name;
 
     public DaemonThreadFactory(@Nullable String name) {
         this.name = name;

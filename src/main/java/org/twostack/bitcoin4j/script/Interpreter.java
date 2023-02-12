@@ -39,56 +39,54 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.twostack.bitcoin4j.script.Script.*;
 import static org.twostack.bitcoin4j.script.ScriptError.SCRIPT_ERR_INVALID_STACK_OPERATION;
-import static org.twostack.bitcoin4j.script.ScriptFlags.*;
 import static org.twostack.bitcoin4j.script.ScriptOpCodes.*;
 
 public class Interpreter {
 
-    private static final Logger log = LoggerFactory.getLogger(Script.class);
+    /**
+     * 1KB
+     */
+    public static final int ONE_KILOBYTE = 1000;
 
     // Maximum script number length after Genesis
     //consensus.h in node client
-    /** 1KB */
-    public static final int ONE_KILOBYTE = 1000;
-
     //    public static final long MAX_SCRIPT_ELEMENT_SIZE = 520;  // bytes
     public static final long MAX_SCRIPT_ELEMENT_SIZE = 2147483647;  // 2Gigabytes after Genesis - (2^31 -1)
+    public static final int SIG_SIZE = 75;
 //    private static final int MAX_OPS_PER_SCRIPT = 201;
-
+    /**
+     * Max number of sigops allowed in a standard p2sh redeem script
+     */
+    public static final int MAX_P2SH_SIGOPS = 15;
+    // Maximum script number length after Genesis
+    public static final int MAX_SCRIPT_NUM_LENGTH_AFTER_GENESIS = 750 * ONE_KILOBYTE;
+    public static final int MAX_SCRIPT_NUM_LENGTH_BEFORE_GENESIS = 4;
+    public static final int DEFAULT_SCRIPT_NUM_LENGTH_POLICY_AFTER_GENESIS = 250 * 1024;
+    public static final int MAX_SCRIPT_ELEMENT_SIZE_BEFORE_GENESIS = 520;
+    private static final Logger log = LoggerFactory.getLogger(Script.class);
     // Maximum number of non-push operations per script after GENESIS
     // Maximum number of non-push operations per script before GENESIS
     private static final long MAX_OPS_PER_SCRIPT_BEFORE_GENESIS = 500;
-
-// Maximum number of non-push operations per script after GENESIS
-    private static long UINT32_MAX = 4294967295L;
-    private static final long MAX_OPS_PER_SCRIPT_AFTER_GENESIS = UINT32_MAX;
-
     private static final int MAX_STACK_SIZE = 1000;
     private static final int DEFAULT_MAX_NUM_ELEMENT_SIZE = 4;
     private static final int MAX_PUBKEYS_PER_MULTISIG = 20;
     private static final int MAX_SCRIPT_SIZE = 10000;
-    public static final int SIG_SIZE = 75;
-    /** Max number of sigops allowed in a standard p2sh redeem script */
-    public static final int MAX_P2SH_SIGOPS = 15;
-
-    // Maximum script number length after Genesis
-    public static final int MAX_SCRIPT_NUM_LENGTH_AFTER_GENESIS = 750 * ONE_KILOBYTE;
-
-    public static final int MAX_SCRIPT_NUM_LENGTH_BEFORE_GENESIS = 4;
-    public static final int DEFAULT_SCRIPT_NUM_LENGTH_POLICY_AFTER_GENESIS = 250 * 1024;
-
-    public static final int MAX_SCRIPT_ELEMENT_SIZE_BEFORE_GENESIS = 520;
+    // Maximum number of non-push operations per script after GENESIS
+    private static final long UINT32_MAX = 4294967295L;
+    private static final long MAX_OPS_PER_SCRIPT_AFTER_GENESIS = UINT32_MAX;
 
     ////////////////////// Script verification and helpers ////////////////////////////////
 
     private static boolean castToBool(byte[] data) {
-        for (int i = 0; i < data.length; i++)
-        {
+        for (int i = 0; i < data.length; i++) {
             // "Can be negative zero" - Bitcoin Core (see OpenSSL's BN_bn2mpi)
             if (data[i] != 0)
                 return !(i == data.length - 1 && (data[i] & 0xFF) == 0x80);
@@ -99,9 +97,9 @@ public class Interpreter {
     /**
      * Cast a script chunk to a BigInteger.
      *
+     * @throws ScriptException if the chunk is longer than 4 bytes.
      * @see #castToBigInteger(byte[], int, boolean) for values with different maximum
      * sizes.
-     * @throws ScriptException if the chunk is longer than 4 bytes.
      */
     private static BigInteger castToBigInteger(byte[] chunk, final boolean requireMinimal) throws ScriptException {
         return castToBigInteger(chunk, 4, requireMinimal);
@@ -112,11 +110,12 @@ public class Interpreter {
      * {@link #castToBigInteger(byte[], boolean)} instead, this is only for cases where
      * the normal maximum length does not apply (i.e. CHECKLOCKTIMEVERIFY).
      *
-     * @param maxLength the maximum length in bytes.
+     * @param maxLength      the maximum length in bytes.
      * @param requireMinimal check if the number is encoded with the minimum possible number of bytes
      * @throws ScriptException if the chunk is longer than the specified maximum.
      */
-    /* package private */ static BigInteger castToBigInteger(final byte[] chunk, final int maxLength, final boolean requireMinimal) throws ScriptException {
+    /* package private */
+    static BigInteger castToBigInteger(final byte[] chunk, final int maxLength, final boolean requireMinimal) throws ScriptException {
         if (chunk.length > maxLength)
             throw new ScriptException(ScriptError.SCRIPT_ERR_NUMBER_OVERFLOW, "Script attempted to use an integer larger than " + maxLength + " bytes");
 
@@ -134,56 +133,13 @@ public class Interpreter {
                 // is +-255, which encode to 0xff00 and 0xff80 respectively.
                 // (big-endian).
                 if (chunk.length <= 1 || (chunk[chunk.length - 2] & 0x80) == 0) {
-                    throw  new ScriptException(ScriptError.SCRIPT_ERR_NUMBER_MINENCODE, "non-minimally encoded script number");
+                    throw new ScriptException(ScriptError.SCRIPT_ERR_NUMBER_MINENCODE, "non-minimally encoded script number");
                 }
             }
         }
 
         return Utils.decodeMPI(Utils.reverseBytes(chunk), false);
     }
-
-    /** @deprecated use {@link ScriptPattern#isOpReturn(Script)} */
-    @Deprecated
-    public boolean isOpReturn(Script script) {
-        return ScriptPattern.isOpReturn(script);
-    }
-
-
-    public int decodeFromOpN(int opcode) {
-        checkArgument((opcode == OP_0 || opcode == OP_1NEGATE) || (opcode >= OP_1 && opcode <= OP_16),
-                "decodeFromOpN called on non OP_N opcode: %s", ScriptOpCodes.getOpCodeName(opcode));
-        if (opcode == OP_0)
-            return 0;
-        else if (opcode == OP_1NEGATE)
-            return -1;
-        else
-            return opcode + 1 - OP_1;
-    }
-
-    public int encodeToOpN(int value) {
-        checkArgument(value >= -1 && value <= 16, "encodeToOpN called for " + value + " which we cannot encode in an opcode.");
-        if (value == 0)
-            return OP_0;
-        else if (value == -1)
-            return OP_1NEGATE;
-        else
-            return value - 1 + OP_1;
-    }
-
-    /**
-     * Gets the count of regular SigOps in the script program (counting multisig ops as 20)
-     */
-    public int getSigOpCount(byte[] program) throws ScriptException {
-
-        Script script = new ScriptBuilder().build();
-        try {
-            script = Script.fromByteArray(program);
-        } catch (ScriptException e) {
-            // Ignore errors and count up to the parse-able length
-        }
-        return Script.getSigOpCount(script.chunks, false);
-    }
-
 
     private static boolean isOpcodeDisabled(int opcode, Set<VerifyFlag> verifyFlags) {
 
@@ -200,22 +156,9 @@ public class Interpreter {
         }
 
 
-
         return false;
 
     }
-
-
-//    /**
-//     * Exposes the script interpreter.
-//     * is useful if you need more precise control or access to the final state of the stack. This interface is very
-//     * likely to change in future.
-//     */
-//    public static void executeScript(@Nullable Transaction txContainingThis, long index,
-//                                     Script script, LinkedList<byte[]> stack, Coin value, Set<VerifyFlag> verifyFlags) throws ScriptException {
-//        executeScript(txContainingThis,index, script, stack, value, verifyFlags /*, null*/);
-//    }
-
 
     /**
      * Exposes the script interpreter. Normally you should not use this directly, instead use
@@ -256,7 +199,7 @@ public class Interpreter {
             }
 
             // Disabled opcodes.
-            if (isOpcodeDisabled(opcode, verifyFlags) && (!verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS) || shouldExecute)){
+            if (isOpcodeDisabled(opcode, verifyFlags) && (!verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS) || shouldExecute)) {
                 throw new ScriptException(ScriptError.SCRIPT_ERR_DISABLED_OPCODE, "Script included a disabled Script Op.");
             }
 
@@ -270,30 +213,30 @@ public class Interpreter {
                 } else {
                     stack.add(chunk.data);
                 }
-            } else if (shouldExecute || (OP_IF <= opcode && opcode <= OP_ENDIF)){
+            } else if (shouldExecute || (OP_IF <= opcode && opcode <= OP_ENDIF)) {
 
                 switch (opcode) {
                     case OP_IF:
                     case OP_NOTIF:
                         boolean fValue = false;
-                        if (shouldExecute){
-                            if (stack.size() < 1){
+                        if (shouldExecute) {
+                            if (stack.size() < 1) {
                                 throw new ScriptException(ScriptError.SCRIPT_ERR_UNBALANCED_CONDITIONAL, "Attempted OP_IF on an empty stack");
                             }
 
                             byte[] stacktop = stack.getLast();
                             if (verifyFlags.contains(VerifyFlag.MINIMALIF)) {
-                                if (stacktop.length > 1){
+                                if (stacktop.length > 1) {
                                     throw new ScriptException(ScriptError.SCRIPT_ERR_MINIMALIF, "Argument for OP_IF/NOT_IF must be 0x01 or empty");
                                 }
 
-                                if (stacktop.length == 1 && stacktop[0] != 1){
+                                if (stacktop.length == 1 && stacktop[0] != 1) {
                                     throw new ScriptException(ScriptError.SCRIPT_ERR_MINIMALIF, "Argument for OP_IF/NOT_IF must be 0x01 or empty");
                                 }
                             }
 
                             fValue = castToBool(stacktop);
-                            if (opcode == OP_NOTIF){
+                            if (opcode == OP_NOTIF) {
                                 fValue = !fValue;
                             }
                             stack.pollLast(); //pop top value off stack
@@ -346,14 +289,14 @@ public class Interpreter {
                             throw new ScriptException(ScriptError.SCRIPT_ERR_VERIFY, "OP_VERIFY failed");
                         break;
                     case OP_RETURN:
-                        if (verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS)){
-                            if (ifStack.isEmpty()){
+                        if (verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS)) {
+                            if (ifStack.isEmpty()) {
                                 // Terminate the execution as successful. The remainder of the script does not affect the validity (even in
                                 // presence of unbalanced IFs, invalid opcodes etc)
                                 return;
                             }
                             nonTopLevelReturnAfterGenesis = true;
-                        }else {
+                        } else {
                             // Pre-Genesis OP_RETURN marks script as invalid
                             throw new ScriptException(ScriptError.SCRIPT_ERR_OP_RETURN, "Script called OP_RETURN");
                         }
@@ -468,7 +411,7 @@ public class Interpreter {
                     case OP_ROLL:
                         if (stack.size() < 1)
                             throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "Attempted OP_PICK/OP_ROLL on an empty stack");
-                        long val = castToBigInteger(stack.pollLast(),maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA)).longValue();
+                        long val = castToBigInteger(stack.pollLast(), maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA)).longValue();
                         if (val < 0 || val >= stack.size())
                             throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "OP_PICK/OP_ROLL attempted to get data deeper than stack size");
                         Iterator<byte[]> itPICK = stack.descendingIterator();
@@ -523,7 +466,7 @@ public class Interpreter {
                         if (stack.size() < 2)
                             throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "Invalid stack operation.");
 
-                        int numSize = castToBigInteger(stack.pollLast(), maxScriptNumLength,enforceMinimal).intValue();
+                        int numSize = castToBigInteger(stack.pollLast(), maxScriptNumLength, enforceMinimal).intValue();
 
                         if (!verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS) && numSize > MAX_SCRIPT_ELEMENT_SIZE_BEFORE_GENESIS)
                             throw new ScriptException(ScriptError.SCRIPT_ERR_PUSH_SIZE, "Push value size limit exceeded.");
@@ -561,13 +504,13 @@ public class Interpreter {
                         if (stack.size() < 2)
                             throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "Invalid stack operation.");
 
-                        BigInteger biSplitPos = castToBigInteger(stack.pollLast(), maxScriptNumLength,enforceMinimal);
+                        BigInteger biSplitPos = castToBigInteger(stack.pollLast(), maxScriptNumLength, enforceMinimal);
 
                         //sanity check in case we aren't enforcing minimal number encoding
                         //we will check that the biSplitPos value can be safely held in an int
                         //before we cast it as BigInteger will behave similar to casting if the value
                         //is greater than the target type can hold.
-                        BigInteger biMaxInt = BigInteger.valueOf((long) Integer.MAX_VALUE);
+                        BigInteger biMaxInt = BigInteger.valueOf(Integer.MAX_VALUE);
                         if (biSplitPos.compareTo(biMaxInt) >= 0)
                             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Invalid OP_SPLIT range.");
 
@@ -638,11 +581,11 @@ public class Interpreter {
                                 shifted = shifted.rightShift(n);
                             }
 
-                            if (n > 0){
+                            if (n > 0) {
                                 //shift occured
                                 stack.push(shifted.array());
 
-                            }else{
+                            } else {
                                 //no shift, just push original value back onto stack
                                 stack.push(valueToShiftBuf);
                             }
@@ -712,7 +655,7 @@ public class Interpreter {
                     case OP_EQUAL:
                         if (stack.size() < 2)
                             throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "Attempted OP_EQUAL on a stack with size < 2");
-                        stack.add(Arrays.equals(stack.pollLast(), stack.pollLast()) ? new byte[] {1} : new byte[] {});
+                        stack.add(Arrays.equals(stack.pollLast(), stack.pollLast()) ? new byte[]{1} : new byte[]{});
                         break;
                     case OP_EQUALVERIFY:
                         if (stack.size() < 2)
@@ -728,7 +671,7 @@ public class Interpreter {
                     case OP_0NOTEQUAL:
                         if (stack.size() < 1)
                             throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "Attempted a numeric op on an empty stack");
-                        BigInteger numericOPnum = castToBigInteger(stack.pollLast(), maxScriptNumLength,verifyFlags.contains(VerifyFlag.MINIMALDATA));
+                        BigInteger numericOPnum = castToBigInteger(stack.pollLast(), maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA));
 
                         switch (opcode) {
                             case OP_1ADD:
@@ -779,8 +722,8 @@ public class Interpreter {
                     case OP_MAX:
                         if (stack.size() < 2)
                             throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "Attempted a numeric op on a stack with size < 2");
-                        BigInteger numericOPnum2 = castToBigInteger(stack.pollLast(),maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA));
-                        BigInteger numericOPnum1 = castToBigInteger(stack.pollLast(),maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA));
+                        BigInteger numericOPnum2 = castToBigInteger(stack.pollLast(), maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA));
+                        BigInteger numericOPnum1 = castToBigInteger(stack.pollLast(), maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA));
 
                         BigInteger numericOPresult;
                         switch (opcode) {
@@ -889,8 +832,8 @@ public class Interpreter {
                     case OP_NUMEQUALVERIFY:
                         if (stack.size() < 2)
                             throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "Attempted OP_NUMEQUALVERIFY on a stack with size < 2");
-                        BigInteger OPNUMEQUALVERIFYnum2 = castToBigInteger(stack.pollLast(), maxScriptNumLength,verifyFlags.contains(VerifyFlag.MINIMALDATA));
-                        BigInteger OPNUMEQUALVERIFYnum1 = castToBigInteger(stack.pollLast(), maxScriptNumLength,verifyFlags.contains(VerifyFlag.MINIMALDATA));
+                        BigInteger OPNUMEQUALVERIFYnum2 = castToBigInteger(stack.pollLast(), maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA));
+                        BigInteger OPNUMEQUALVERIFYnum1 = castToBigInteger(stack.pollLast(), maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA));
 
                         if (!OPNUMEQUALVERIFYnum1.equals(OPNUMEQUALVERIFYnum2))
                             throw new ScriptException(ScriptError.SCRIPT_ERR_NUMEQUALVERIFY, "OP_NUMEQUALVERIFY failed");
@@ -898,9 +841,9 @@ public class Interpreter {
                     case OP_WITHIN:
                         if (stack.size() < 3)
                             throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "Attempted OP_WITHIN on a stack with size < 3");
-                        BigInteger OPWITHINnum3 = castToBigInteger(stack.pollLast(),maxScriptNumLength,verifyFlags.contains(VerifyFlag.MINIMALDATA));
-                        BigInteger OPWITHINnum2 = castToBigInteger(stack.pollLast(),maxScriptNumLength,verifyFlags.contains(VerifyFlag.MINIMALDATA));
-                        BigInteger OPWITHINnum1 = castToBigInteger(stack.pollLast(),maxScriptNumLength,verifyFlags.contains(VerifyFlag.MINIMALDATA));
+                        BigInteger OPWITHINnum3 = castToBigInteger(stack.pollLast(), maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA));
+                        BigInteger OPWITHINnum2 = castToBigInteger(stack.pollLast(), maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA));
+                        BigInteger OPWITHINnum1 = castToBigInteger(stack.pollLast(), maxScriptNumLength, verifyFlags.contains(VerifyFlag.MINIMALDATA));
                         if (OPWITHINnum2.compareTo(OPWITHINnum1) <= 0 && OPWITHINnum1.compareTo(OPWITHINnum3) < 0)
                             stack.add(Utils.reverseBytes(Utils.encodeMPI(BigInteger.ONE, false)));
                         else
@@ -951,11 +894,11 @@ public class Interpreter {
 
                         try {
                             executeCheckSig(txContainingThis, (int) index, script, stack, lastCodeSepLocation, opcode, value, verifyFlags);
-                        } catch(SignatureEncodingException ex){
-                            stack.add(new byte[] {}); //push false onto stack
+                        } catch (SignatureEncodingException ex) {
+                            stack.add(new byte[]{}); //push false onto stack
                             throw new ScriptException(ex.getErr(), ex.getMessage());
-                        }catch(PubKeyEncodingException ex){
-                            stack.add(new byte[] {}); //push false onto stack
+                        } catch (PubKeyEncodingException ex) {
+                            stack.add(new byte[]{}); //push false onto stack
                             throw new ScriptException(ex.getErr(), ex.getMessage());
                         }
 
@@ -968,11 +911,11 @@ public class Interpreter {
                         try {
                             opCount = executeMultiSig(txContainingThis, (int) index, script, stack, opCount, lastCodeSepLocation, opcode, value, verifyFlags);
 
-                        } catch(SignatureEncodingException ex){
-                            stack.add(new byte[] {}); //push false onto stack
+                        } catch (SignatureEncodingException ex) {
+                            stack.add(new byte[]{}); //push false onto stack
                             throw new ScriptException(ex.getErr(), ex.getMessage());
-                        }catch(PubKeyEncodingException ex){
-                            stack.add(new byte[] {}); //push false onto stack
+                        } catch (PubKeyEncodingException ex) {
+                            stack.add(new byte[]{}); //push false onto stack
                             throw new ScriptException(ex.getErr(), ex.getMessage());
                         }
                         break;
@@ -1012,7 +955,7 @@ public class Interpreter {
                         break;
 
                     default:
-                        if (isInvalidBranchingOpcode(opcode) && verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS) && !shouldExecute){
+                        if (isInvalidBranchingOpcode(opcode) && verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS) && !shouldExecute) {
                             break;
                         }
                         throw new ScriptException(ScriptError.SCRIPT_ERR_BAD_OPCODE, "Script used a reserved or disabled opcode: " + opcode);
@@ -1030,7 +973,6 @@ public class Interpreter {
     private static boolean isInvalidBranchingOpcode(int opcode) {
         return opcode == OP_VERIF || opcode == OP_VERNOTIF;
     }
-
 
     // This is more or less a direct translation of the code in Bitcoin Core
     private static void executeCheckLockTimeVerify(Transaction txContainingThis, int index, LinkedList<byte[]> stack, Set<VerifyFlag> verifyFlags) throws ScriptException {
@@ -1051,10 +993,10 @@ public class Interpreter {
         // We want to compare apples to apples, so fail the script unless the type
         // of nLockTime being tested is the same as the nLockTime in the
         // transaction.
-        if (!(((txContainingThis.getLockTime() <  Transaction.LOCKTIME_THRESHOLD) &&
+        if (!(((txContainingThis.getLockTime() < Transaction.LOCKTIME_THRESHOLD) &&
                 (nLockTime.compareTo(Transaction.LOCKTIME_THRESHOLD_BIG)) < 0) ||
-                        ((txContainingThis.getLockTime() >= Transaction.LOCKTIME_THRESHOLD) &&
-                                (nLockTime.compareTo(Transaction.LOCKTIME_THRESHOLD_BIG)) >= 0)) ) {
+                ((txContainingThis.getLockTime() >= Transaction.LOCKTIME_THRESHOLD) &&
+                        (nLockTime.compareTo(Transaction.LOCKTIME_THRESHOLD_BIG)) >= 0))) {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNSATISFIED_LOCKTIME, "Locktime requirement type mismatch");
         }
 
@@ -1076,114 +1018,9 @@ public class Interpreter {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNSATISFIED_LOCKTIME, "Transaction contains a final transaction input for a CHECKLOCKTIMEVERIFY script.");
     }
 
-
-    public void correctlySpends( Script scriptSig, Script scriptPubKey, Transaction txn, int scriptSigIndex, Set<VerifyFlag> verifyFlags) throws ScriptException {
-        correctlySpends(scriptSig, scriptPubKey, txn, scriptSigIndex,  verifyFlags, Coin.ZERO);
-    }
-
-    /**
-     * Verifies that this script (interpreted as a scriptSig) correctly spends the given scriptPubKey.
-     * TODO: Verify why I'd need to pass in scriptSig again if I already have it from the [txn] + [scriptSigIndex] parameter
-     *
-     * @param scriptSig the spending Script
-     * @param scriptSigIndex The index in the provided txn of the scriptSig
-     * @param txn The transaction in which the provided scriptSig resides.
-     *            Accessing txn from another thread while this method runs results in undefined behavior.
-     * @param scriptPubKey The connected scriptPubKey (in output ) containing the conditions needed to claim the value.
-     * @param verifyFlags Each flag enables one validation rule.
-     * @param satoshis Value of the input ? Needed for verification when ForkId sighash is used
-     */
-    public void correctlySpends( Script scriptSig, Script scriptPubKey, Transaction txn, int scriptSigIndex, Set<VerifyFlag> verifyFlags, Coin satoshis) throws ScriptException {
-//    public void correctlySpends(Transaction txn, long scriptSigIndex, Script scriptPubKey, Coin value, Set<VerifyFlag> verifyFlags) throws ScriptException {
-        // Clone the transaction because executing the script involves editing it, and if we die, we'll leave
-        // the tx half broken (also it's not so thread safe to work on it directly.
-
-        if (verifyFlags.contains(VerifyFlag.SIGPUSHONLY) && !Script.isPushOnly(scriptSig)){
-           throw new ScriptException(ScriptError.SCRIPT_ERR_SIG_PUSHONLY, "No pushdata operations allowed in scriptSig");
-        }
-
-        Transaction transaction;
-        try {
-            transaction = new Transaction(ByteBuffer.wrap(txn.serialize()));
-        } catch (ProtocolException | IOException e) {
-            throw new RuntimeException(e);   // Should not happen unless we were given a totally broken transaction.
-        }
-        if (scriptSig.getProgram().length > 10000 || scriptPubKey.getProgram().length > 10000)
-            throw new ScriptException(ScriptError.SCRIPT_ERR_SCRIPT_SIZE, "Script larger than 10,000 bytes");
-
-        LinkedList<byte[]> stack = new LinkedList<byte[]>();
-        LinkedList<byte[]> p2shStack = null;
-
-        executeScript(transaction, scriptSigIndex, scriptSig,  stack, satoshis, verifyFlags);
-        if (verifyFlags.contains(VerifyFlag.P2SH) && !(verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS))){
-            p2shStack = new LinkedList<byte[]>(stack);
-        }
-
-        executeScript(transaction, scriptSigIndex, scriptPubKey, stack, satoshis, verifyFlags);
-
-        if (stack.size() == 0)
-            throw new ScriptException(ScriptError.SCRIPT_ERR_EVAL_FALSE, "Stack empty at end of script execution.");
-
-        if (!castToBool(stack.getLast()))
-            throw new ScriptException(ScriptError.SCRIPT_ERR_EVAL_FALSE, "Script resulted in a non-true stack: " + stack);
-
-        // P2SH is pay to script hash. It means that the scriptPubKey has a special form which is a valid
-        // program but it has "useless" form that if evaluated as a normal program always returns true.
-        // Instead, miners recognize it as special based on its template - it provides a hash of the real scriptPubKey
-        // and that must be provided by the input. The goal of this bizarre arrangement is twofold:
-        //
-        // (1) You can sum up a large, complex script (like a CHECKMULTISIG script) with an address that's the same
-        //     size as a regular address. This means it doesn't overload scannable QR codes/NFC tags or become
-        //     un-wieldy to copy/paste.
-        // (2) It allows the working set to be smaller: nodes perform best when they can store as many unspent outputs
-        //     in RAM as possible, so if the outputs are made smaller and the inputs get bigger, then it's better for
-        //     overall scalability and performance.
-
-        // TODO: Check if we can take out enforceP2SH if there's a checkpoint at the enforcement block.
-        if (verifyFlags.contains(VerifyFlag.P2SH)
-                && ScriptPattern.isP2SH(scriptPubKey)
-                && !(verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS)) ) {
-            for (ScriptChunk chunk : scriptSig.getChunks())
-                if (chunk.isOpCode() && chunk.opcode > OP_16)
-                    throw new ScriptException(ScriptError.SCRIPT_ERR_SIG_PUSHONLY, "Attempted to spend a P2SH scriptPubKey with a script that contained script ops");
-
-            stack = new LinkedList<>(p2shStack); //restore stack
-            // stack cannot be empty here, because if it was the P2SH  HASH <> EQUAL
-            // scriptPubKey would be evaluated with an empty stack and the
-            // EvalScript above would return false.
-            assert(!stack.isEmpty());
-
-            byte[] scriptPubKeyBytes = stack.pollLast();
-            Script scriptPubKeyP2SH = new Script(scriptPubKeyBytes);
-
-            executeScript(transaction, scriptSigIndex, scriptPubKeyP2SH, stack, satoshis, verifyFlags);
-
-            if (stack.isEmpty())
-                throw new ScriptException(ScriptError.SCRIPT_ERR_EVAL_FALSE, "P2SH stack empty at end of script execution.");
-
-            if (!castToBool(stack.getLast()))
-                throw new ScriptException(ScriptError.SCRIPT_ERR_EVAL_FALSE, "P2SH script execution resulted in a non-true stack");
-        }
-
-        // The CLEANSTACK check is only performed after potential P2SH evaluation,
-        // as the non-P2SH evaluation of a P2SH script will obviously not result in
-        // a clean stack (the P2SH inputs remain). The same holds for witness
-        // evaluation.
-        if (verifyFlags.contains(VerifyFlag.CLEANSTACK)){
-            // Disallow CLEANSTACK without P2SH, as otherwise a switch
-            // CLEANSTACK->P2SH+CLEANSTACK would be possible, which is not a
-            // softfork (and P2SH should be one).
-            assert(verifyFlags.contains(VerifyFlag.P2SH));
-            if (stack.size() != 1){
-                throw new ScriptException(ScriptError.SCRIPT_ERR_CLEANSTACK, "Cleanstack is disallowed without P2SH");
-            }
-        }
-    }
-
-
     private static void executeCheckSig(Transaction txContainingThis, int index, Script script, LinkedList<byte[]> stack,
                                         int lastCodeSepLocation, int opcode, Coin value,
-                                        Set<VerifyFlag> verifyFlags) throws ScriptException, SignatureEncodingException, PubKeyEncodingException  {
+                                        Set<VerifyFlag> verifyFlags) throws ScriptException, SignatureEncodingException, PubKeyEncodingException {
         final boolean requireCanonical = verifyFlags.contains(VerifyFlag.STRICTENC)
                 || verifyFlags.contains(VerifyFlag.LOW_S);
         if (stack.size() < 2)
@@ -1212,8 +1049,8 @@ public class Interpreter {
         //default to 1 in case of empty Sigs
         int sigHashType = SigHashType.UNSET.value;
 
-        if (sigBytes.length > 0){
-           sigHashType = sigBytes[sigBytes.length - 1] & 0xFF;
+        if (sigBytes.length > 0) {
+            sigHashType = sigBytes[sigBytes.length - 1] & 0xFF;
         }
 
         try {
@@ -1242,25 +1079,37 @@ public class Interpreter {
                 log.warn("Signature checking failed!", e1);
         }
 
-        if (!sigValid && verifyFlags.contains(VerifyFlag.NULLFAIL) && sigBytes.length > 0 ){
+        if (!sigValid && verifyFlags.contains(VerifyFlag.NULLFAIL) && sigBytes.length > 0) {
             throw new ScriptException(ScriptError.SCRIPT_ERR_SIG_NULLFAIL, "Failed strict DER Signature coding. ");
         }
 
         if (opcode == OP_CHECKSIG)
-            stack.add(sigValid ? new byte[] {1} : new byte[] {});
+            stack.add(sigValid ? new byte[]{1} : new byte[]{});
         else if (opcode == OP_CHECKSIGVERIFY)
             if (!sigValid)
                 throw new ScriptException(ScriptError.SCRIPT_ERR_CHECKSIGVERIFY, "Script failed OP_CHECKSIGVERIFY");
     }
+
+
+//    /**
+//     * Exposes the script interpreter.
+//     * is useful if you need more precise control or access to the final state of the stack. This interface is very
+//     * likely to change in future.
+//     */
+//    public static void executeScript(@Nullable Transaction txContainingThis, long index,
+//                                     Script script, LinkedList<byte[]> stack, Coin value, Set<VerifyFlag> verifyFlags) throws ScriptException {
+//        executeScript(txContainingThis,index, script, stack, value, verifyFlags /*, null*/);
+//    }
+
     /**
      * A canonical signature exists of: <30> <total len> <02> <len R> <R> <02> <len
      * S> <S> <hashtype>, where R and S are not negative (their first byte has its
      * highest bit not set), and not excessively padded (do not start with a 0 byte,
      * unless an otherwise negative number follows, in which case a single 0 byte is
      * necessary and even required).
-     *
+     * <p>
      * See https://bitcointalk.org/index.php?topic=8392.msg127623#msg127623
-     *
+     * <p>
      * This function is consensus-critical since BIP66.
      */
     static boolean isValidSignatureEncoding(byte[] sigBytes) {
@@ -1325,13 +1174,9 @@ public class Interpreter {
 
         // Null bytes at the start of S are not allowed, unless S would otherwise be
         // interpreted as a negative number.
-        if (lenS > 1 && (sigBytes[lenR + 6] == 0x00) && ((sigBytes[lenR + 7] & 0x80) == 0)) { //FIXME: Check
-            return false;
-        }
-
-        return true;
+        //FIXME: Check
+        return lenS <= 1 || (sigBytes[lenR + 6] != 0x00) || ((sigBytes[lenR + 7] & 0x80) != 0);
     }
-
 
     ///Comparable to bitcoind's IsLowDERSignature. Returns true if the signature has a 'low' S-value.
     ///
@@ -1342,17 +1187,17 @@ public class Interpreter {
 
         try {
             ECKey.ECDSASignature sig = ECKey.ECDSASignature.decodeFromDER(sigBytes);
-            if ((sig.s.compareTo( BigInteger.ONE) == -1)  || (sig.s.compareTo(maxVal) == 1)){
+            if ((sig.s.compareTo(BigInteger.ONE) == -1) || (sig.s.compareTo(maxVal) == 1)) {
                 return false;
             }
-        }catch(SignatureDecodeException ex){
+        } catch (SignatureDecodeException ex) {
             return false;
         }
 
         return true;
     }
 
-    static void checkIsLowDERSignature(byte[] sigBytes) throws ScriptException{
+    static void checkIsLowDERSignature(byte[] sigBytes) throws ScriptException {
         if (!isValidSignatureEncoding(sigBytes)) {
             throw new ScriptException(ScriptError.SCRIPT_ERR_SIG_DER, "Invalid signature encoding");
         }
@@ -1362,13 +1207,13 @@ public class Interpreter {
         }
     }
 
-    private static void checkSignatureEncoding(byte[] sigBytes, Set<VerifyFlag> flags) throws SignatureEncodingException{
+    private static void checkSignatureEncoding(byte[] sigBytes, Set<VerifyFlag> flags) throws SignatureEncodingException {
         // Empty signature. Not strictly DER encoded, but allowed to provide a
         // compact way to provide an invalid signature for use with CHECK(MULTI)SIG
         if (sigBytes.length == 0) {
-            return ;
+            return;
         }
-        if ((flags.contains (VerifyFlag.DERSIG) | flags.contains(VerifyFlag.LOW_S) |
+        if ((flags.contains(VerifyFlag.DERSIG) | flags.contains(VerifyFlag.LOW_S) |
                 flags.contains(VerifyFlag.STRICTENC)) &&
                 !isValidSignatureEncoding(sigBytes)) {
             throw new SignatureEncodingException(ScriptError.SCRIPT_ERR_SIG_DER, "Invalid Signature Encoding");
@@ -1377,8 +1222,8 @@ public class Interpreter {
             checkIsLowDERSignature(sigBytes);
         }
 
-        if (flags.contains(VerifyFlag.STRICTENC) ) {
-            int sigHashType = sigBytes[sigBytes.length -1];
+        if (flags.contains(VerifyFlag.STRICTENC)) {
+            int sigHashType = sigBytes[sigBytes.length - 1];
 
 
             boolean usesForkId = (sigHashType & SigHashType.FORKID.value) != 0;
@@ -1403,20 +1248,15 @@ public class Interpreter {
             return false;
         }
         if (pubkey[0] == 0x04) {
-            if (pubkey.length != 65) {
-                //  Non-canonical public key: invalid length for uncompressed key
-                return false;
-            }
+            //  Non-canonical public key: invalid length for uncompressed key
+            return pubkey.length == 65;
         } else if (pubkey[0] == 0x02 || pubkey[0] == 0x03) {
-            if (pubkey.length != 33) {
-                //  Non-canonical public key: invalid length for compressed key
-                return false;
-            }
+            //  Non-canonical public key: invalid length for compressed key
+            return pubkey.length == 33;
         } else {
             //  Non-canonical public key: neither compressed nor uncompressed
             return false;
         }
-        return true;
     }
 
     private static boolean isCompressedPubKey(byte[] pubKey) {
@@ -1424,28 +1264,22 @@ public class Interpreter {
             //  Non-canonical public key: invalid length for compressed key
             return false;
         }
-        if (pubKey[0] != 0x02 && pubKey[0] != 0x03) {
-            //  Non-canonical public key: invalid prefix for compressed key
-            return false;
+        //  Non-canonical public key: invalid prefix for compressed key
+        return pubKey[0] == 0x02 || pubKey[0] == 0x03;
+    }
+
+    private static boolean checkPubKeyEncoding(byte[] pubKey, Set<VerifyFlag> flags) throws PubKeyEncodingException {
+
+        if (flags.contains(VerifyFlag.STRICTENC) && !isCanonicalPubkey(pubKey)) {
+            throw new PubKeyEncodingException(ScriptError.SCRIPT_ERR_PUBKEYTYPE, "Public key has invalid encoding");
         }
+
+        if (flags.contains(VerifyFlag.COMPRESSED_PUBKEYTYPE) && !isCompressedPubKey(pubKey)) {
+            throw new PubKeyEncodingException(ScriptError.SCRIPT_ERR_NONCOMPRESSED_PUBKEY, "Public key has invalid encoding");
+        }
+
         return true;
     }
-
-
-
-    private static boolean checkPubKeyEncoding(byte[] pubKey, Set<VerifyFlag> flags) throws PubKeyEncodingException{
-
-       if (flags.contains(VerifyFlag.STRICTENC) && !isCanonicalPubkey(pubKey)) {
-           throw new PubKeyEncodingException(ScriptError.SCRIPT_ERR_PUBKEYTYPE, "Public key has invalid encoding");
-       }
-
-       if (flags.contains(VerifyFlag.COMPRESSED_PUBKEYTYPE) && !isCompressedPubKey(pubKey)){
-           throw new PubKeyEncodingException(ScriptError.SCRIPT_ERR_NONCOMPRESSED_PUBKEY, "Public key has invalid encoding");
-       }
-
-       return true;
-    }
-
 
     private static int executeMultiSig(Transaction txContainingThis, int index, Script script, LinkedList<byte[]> stack,
                                        int opCount, int lastCodeSepLocation, int opcode, Coin value,
@@ -1519,14 +1353,14 @@ public class Interpreter {
             // We could reasonably move this out of the loop, but because signature verification is significantly
             // more expensive than hashing, its not a big deal.
 
-             checkSignatureEncoding(sigBytes, verifyFlags);
-             checkPubKeyEncoding(pubKey, verifyFlags);
+            checkSignatureEncoding(sigBytes, verifyFlags);
+            checkPubKeyEncoding(pubKey, verifyFlags);
 
 
             //default to 1 in case of empty Sigs
             int sigHashType = SigHashType.UNSET.value;
 
-            if (sigBytes.length > 0){
+            if (sigBytes.length > 0) {
                 sigHashType = sigBytes[sigBytes.length - 1];
             }
 
@@ -1581,8 +1415,8 @@ public class Interpreter {
         // Unfortunately this is a potential source of
         // mutability, so optionally verify it is exactly equal
         // to zero prior to removing it from the stack.
-        if (stack.size() < 1){
-           throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "No dummy element left on stack to compensate for Core bug");
+        if (stack.size() < 1) {
+            throw new ScriptException(SCRIPT_ERR_INVALID_STACK_OPERATION, "No dummy element left on stack to compensate for Core bug");
         }
 
         //pop the dummy element (core bug argument)
@@ -1592,14 +1426,13 @@ public class Interpreter {
 
 
         if (opcode == OP_CHECKMULTISIG) {
-            stack.add(valid ? new byte[] {1} : new byte[] {});
+            stack.add(valid ? new byte[]{1} : new byte[]{});
         } else if (opcode == OP_CHECKMULTISIGVERIFY) {
             if (!valid)
                 throw new ScriptException(ScriptError.SCRIPT_ERR_CHECKMULTISIGVERIFY, "Script failed OP_CHECKMULTISIGVERIFY");
         }
         return opCount;
     }
-
 
     private static void executeCheckSequenceVerify(Transaction txContainingThis, int index, LinkedList<byte[]> stack, Set<VerifyFlag> verifyFlags) throws ScriptException {
         if (stack.size() < 1)
@@ -1651,7 +1484,7 @@ public class Interpreter {
 
         // Mask off any bits that do not have consensus-enforced meaning
         // before doing the integer comparisons
-        long nLockTimeMask =  TransactionInput.SEQUENCE_LOCKTIME_TYPE_FLAG | TransactionInput.SEQUENCE_LOCKTIME_MASK;
+        long nLockTimeMask = TransactionInput.SEQUENCE_LOCKTIME_TYPE_FLAG | TransactionInput.SEQUENCE_LOCKTIME_MASK;
         long txToSequenceMasked = txToSequence & nLockTimeMask;
         long nSequenceMasked = nSequence & nLockTimeMask;
 
@@ -1691,5 +1524,151 @@ public class Interpreter {
 
     private static boolean isValidMaxOpsPerScript(int nOpCount, boolean isGenesisEnabled) {
         return (nOpCount <= getMaxOpsPerScript(isGenesisEnabled));
+    }
+
+    /**
+     * @deprecated use {@link ScriptPattern#isOpReturn(Script)}
+     */
+    @Deprecated
+    public boolean isOpReturn(Script script) {
+        return ScriptPattern.isOpReturn(script);
+    }
+
+    public int decodeFromOpN(int opcode) {
+        checkArgument((opcode == OP_0 || opcode == OP_1NEGATE) || (opcode >= OP_1 && opcode <= OP_16),
+                "decodeFromOpN called on non OP_N opcode: %s", ScriptOpCodes.getOpCodeName(opcode));
+        if (opcode == OP_0)
+            return 0;
+        else if (opcode == OP_1NEGATE)
+            return -1;
+        else
+            return opcode + 1 - OP_1;
+    }
+
+    public int encodeToOpN(int value) {
+        checkArgument(value >= -1 && value <= 16, "encodeToOpN called for " + value + " which we cannot encode in an opcode.");
+        if (value == 0)
+            return OP_0;
+        else if (value == -1)
+            return OP_1NEGATE;
+        else
+            return value - 1 + OP_1;
+    }
+
+    /**
+     * Gets the count of regular SigOps in the script program (counting multisig ops as 20)
+     */
+    public int getSigOpCount(byte[] program) throws ScriptException {
+
+        Script script = new ScriptBuilder().build();
+        try {
+            script = Script.fromByteArray(program);
+        } catch (ScriptException e) {
+            // Ignore errors and count up to the parse-able length
+        }
+        return Script.getSigOpCount(script.chunks, false);
+    }
+
+    public void correctlySpends(Script scriptSig, Script scriptPubKey, Transaction txn, int scriptSigIndex, Set<VerifyFlag> verifyFlags) throws ScriptException {
+        correctlySpends(scriptSig, scriptPubKey, txn, scriptSigIndex, verifyFlags, Coin.ZERO);
+    }
+
+    /**
+     * Verifies that this script (interpreted as a scriptSig) correctly spends the given scriptPubKey.
+     * TODO: Verify why I'd need to pass in scriptSig again if I already have it from the [txn] + [scriptSigIndex] parameter
+     *
+     * @param scriptSig      the spending Script
+     * @param scriptSigIndex The index in the provided txn of the scriptSig
+     * @param txn            The transaction in which the provided scriptSig resides.
+     *                       Accessing txn from another thread while this method runs results in undefined behavior.
+     * @param scriptPubKey   The connected scriptPubKey (in output ) containing the conditions needed to claim the value.
+     * @param verifyFlags    Each flag enables one validation rule.
+     * @param satoshis       Value of the input ? Needed for verification when ForkId sighash is used
+     */
+    public void correctlySpends(Script scriptSig, Script scriptPubKey, Transaction txn, int scriptSigIndex, Set<VerifyFlag> verifyFlags, Coin satoshis) throws ScriptException {
+//    public void correctlySpends(Transaction txn, long scriptSigIndex, Script scriptPubKey, Coin value, Set<VerifyFlag> verifyFlags) throws ScriptException {
+        // Clone the transaction because executing the script involves editing it, and if we die, we'll leave
+        // the tx half broken (also it's not so thread safe to work on it directly.
+
+        if (verifyFlags.contains(VerifyFlag.SIGPUSHONLY) && !Script.isPushOnly(scriptSig)) {
+            throw new ScriptException(ScriptError.SCRIPT_ERR_SIG_PUSHONLY, "No pushdata operations allowed in scriptSig");
+        }
+
+        Transaction transaction;
+        try {
+            transaction = new Transaction(ByteBuffer.wrap(txn.serialize()));
+        } catch (ProtocolException | IOException e) {
+            throw new RuntimeException(e);   // Should not happen unless we were given a totally broken transaction.
+        }
+        if (scriptSig.getProgram().length > 10000 || scriptPubKey.getProgram().length > 10000)
+            throw new ScriptException(ScriptError.SCRIPT_ERR_SCRIPT_SIZE, "Script larger than 10,000 bytes");
+
+        LinkedList<byte[]> stack = new LinkedList<byte[]>();
+        LinkedList<byte[]> p2shStack = null;
+
+        executeScript(transaction, scriptSigIndex, scriptSig, stack, satoshis, verifyFlags);
+        if (verifyFlags.contains(VerifyFlag.P2SH) && !(verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS))) {
+            p2shStack = new LinkedList<byte[]>(stack);
+        }
+
+        executeScript(transaction, scriptSigIndex, scriptPubKey, stack, satoshis, verifyFlags);
+
+        if (stack.size() == 0)
+            throw new ScriptException(ScriptError.SCRIPT_ERR_EVAL_FALSE, "Stack empty at end of script execution.");
+
+        if (!castToBool(stack.getLast()))
+            throw new ScriptException(ScriptError.SCRIPT_ERR_EVAL_FALSE, "Script resulted in a non-true stack: " + stack);
+
+        // P2SH is pay to script hash. It means that the scriptPubKey has a special form which is a valid
+        // program but it has "useless" form that if evaluated as a normal program always returns true.
+        // Instead, miners recognize it as special based on its template - it provides a hash of the real scriptPubKey
+        // and that must be provided by the input. The goal of this bizarre arrangement is twofold:
+        //
+        // (1) You can sum up a large, complex script (like a CHECKMULTISIG script) with an address that's the same
+        //     size as a regular address. This means it doesn't overload scannable QR codes/NFC tags or become
+        //     un-wieldy to copy/paste.
+        // (2) It allows the working set to be smaller: nodes perform best when they can store as many unspent outputs
+        //     in RAM as possible, so if the outputs are made smaller and the inputs get bigger, then it's better for
+        //     overall scalability and performance.
+
+        // TODO: Check if we can take out enforceP2SH if there's a checkpoint at the enforcement block.
+        if (verifyFlags.contains(VerifyFlag.P2SH)
+                && ScriptPattern.isP2SH(scriptPubKey)
+                && !(verifyFlags.contains(VerifyFlag.UTXO_AFTER_GENESIS))) {
+            for (ScriptChunk chunk : scriptSig.getChunks())
+                if (chunk.isOpCode() && chunk.opcode > OP_16)
+                    throw new ScriptException(ScriptError.SCRIPT_ERR_SIG_PUSHONLY, "Attempted to spend a P2SH scriptPubKey with a script that contained script ops");
+
+            stack = new LinkedList<>(p2shStack); //restore stack
+            // stack cannot be empty here, because if it was the P2SH  HASH <> EQUAL
+            // scriptPubKey would be evaluated with an empty stack and the
+            // EvalScript above would return false.
+            assert (!stack.isEmpty());
+
+            byte[] scriptPubKeyBytes = stack.pollLast();
+            Script scriptPubKeyP2SH = new Script(scriptPubKeyBytes);
+
+            executeScript(transaction, scriptSigIndex, scriptPubKeyP2SH, stack, satoshis, verifyFlags);
+
+            if (stack.isEmpty())
+                throw new ScriptException(ScriptError.SCRIPT_ERR_EVAL_FALSE, "P2SH stack empty at end of script execution.");
+
+            if (!castToBool(stack.getLast()))
+                throw new ScriptException(ScriptError.SCRIPT_ERR_EVAL_FALSE, "P2SH script execution resulted in a non-true stack");
+        }
+
+        // The CLEANSTACK check is only performed after potential P2SH evaluation,
+        // as the non-P2SH evaluation of a P2SH script will obviously not result in
+        // a clean stack (the P2SH inputs remain). The same holds for witness
+        // evaluation.
+        if (verifyFlags.contains(VerifyFlag.CLEANSTACK)) {
+            // Disallow CLEANSTACK without P2SH, as otherwise a switch
+            // CLEANSTACK->P2SH+CLEANSTACK would be possible, which is not a
+            // softfork (and P2SH should be one).
+            assert (verifyFlags.contains(VerifyFlag.P2SH));
+            if (stack.size() != 1) {
+                throw new ScriptException(ScriptError.SCRIPT_ERR_CLEANSTACK, "Cleanstack is disallowed without P2SH");
+            }
+        }
     }
 }

@@ -37,6 +37,18 @@ public class TransactionSigner {
     private PrivateKey signingKey;
 
 
+    /**
+     * Constructs a new instance of the TransactionSigner.
+     * NOTE: The SigHashType for signing will default to a value of
+     * (SigHashType.ALL.value | SigHashType.FORKID.value)
+     *
+     * @param sigHashType - Flags that govern which SigHash algorithm to use during signature generation
+     */
+    public TransactionSigner(int sigHashType, PrivateKey signingKey) {
+        this.sigHashType = sigHashType;
+        this.signingKey = signingKey;
+    }
+
     public byte[] getHash() {
         return hash;
     }
@@ -53,10 +65,6 @@ public class TransactionSigner {
         return signature;
     }
 
-    public byte[] getPreImage() {
-        return preImage;
-    }
-
     /** Constructs a new instance of the TransactionSigner.
      * NOTE: The SigHashType for signing will default to a value of
      *       (SigHashType.ALL.value | SigHashType.FORKID.value)
@@ -65,30 +73,23 @@ public class TransactionSigner {
 //        this.sigHashType = SigHashType.ALL.value | SigHashType.FORKID.value;
 //    }
 
-    /** Constructs a new instance of the TransactionSigner.
-     * NOTE: The SigHashType for signing will default to a value of
-     *       (SigHashType.ALL.value | SigHashType.FORKID.value)
-     *
-     * @param sigHashType - Flags that govern which SigHash algorithm to use during signature generation
-     */
-    public TransactionSigner(int sigHashType, PrivateKey signingKey){
-        this.sigHashType = sigHashType;
-        this.signingKey = signingKey;
+    public byte[] getPreImage() {
+        return preImage;
     }
 
-    /** Signs the provided transaction, and populates the corresponding input's
-     *  LockingScriptBuilder with the signature. Responsibility for what to
-     *  do with the Signature (populate appropriate template) is left to the
-     *  LockingScriptBuilder instance.
+    /**
+     * Signs the provided transaction, and populates the corresponding input's
+     * LockingScriptBuilder with the signature. Responsibility for what to
+     * do with the Signature (populate appropriate template) is left to the
+     * LockingScriptBuilder instance.
+     * <p>
+     * NOTE: This invocation will use the SigHashType set as part of the
+     * constructor invocation. If the default constructor is invoked then
+     * the SigHashType defaults to (SigHashType.ALL.value | SigHashType.FORKID.value) :
      *
-     *  NOTE: This invocation will use the SigHashType set as part of the
-     *  constructor invocation. If the default constructor is invoked then
-     *  the SigHashType defaults to (SigHashType.ALL.value | SigHashType.FORKID.value) :
-     *
-     *
-     * @param unsignedTxn  - Unsigned Transaction
-     * @param utxo - Funding transaction's Output to sign over
-     * @param inputIndex - Input of the current Transaction we are signing for
+     * @param unsignedTxn - Unsigned Transaction
+     * @param utxo        - Funding transaction's Output to sign over
+     * @param inputIndex  - Input of the current Transaction we are signing for
      * @return Signed Transaction
      * @throws TransactionException
      * @throws IOException
@@ -103,16 +104,16 @@ public class TransactionSigner {
         return this.sign(unsignedTxn, utxo, inputIndex, signingKey, sigHashType);
     }
 
-    /** Signs the provided transaction, and populates the corresponding input's
-     *  LockingScriptBuilder with the signature. Responsibility for what to
-     *  do with the Signature (populate appropriate template) is left to the
-     *  LockingScriptBuilder instance
+    /**
+     * Signs the provided transaction, and populates the corresponding input's
+     * LockingScriptBuilder with the signature. Responsibility for what to
+     * do with the Signature (populate appropriate template) is left to the
+     * LockingScriptBuilder instance
      *
-     *
-     * @param unsignedTxn  - Unsigned Transaction
-     * @param utxo - Funding transaction's Output to sign over
-     * @param inputIndex - Input of the current Transaction we are signing for
-     * @param signingKey - Private key to sign with
+     * @param unsignedTxn - Unsigned Transaction
+     * @param utxo        - Funding transaction's Output to sign over
+     * @param inputIndex  - Input of the current Transaction we are signing for
+     * @param signingKey  - Private key to sign with
      * @param sigHashType - Flags that govern which SigHash algorithm is applied
      * @return Signed Transaction
      * @throws TransactionException
@@ -145,7 +146,7 @@ public class TransactionSigner {
 
         if (scriptBuilder != null) {
             scriptBuilder.addSignature(sig);
-        }else{
+        } else {
             throw new TransactionException("Trying to sign a Transaction Input that is missing a SignedUnlockBuilder");
         }
 
@@ -163,7 +164,7 @@ public class TransactionSigner {
 
         //FIXME: This kind of required round-tripping into the base class of TransactionSignature smells funny
         //       We should have a cleaner constructor for TransactionSignature
-        byte[] signedBytes =  signingKey.sign(hash);
+        byte[] signedBytes = signingKey.sign(hash);
         ECKey.ECDSASignature ecSig = ECKey.ECDSASignature.decodeFromDER(signedBytes);
         return new TransactionSignature(ecSig.r, ecSig.s, sigHashType);
     }
@@ -172,16 +173,16 @@ public class TransactionSigner {
         return signingKey;
     }
 
-    public void setSigningKey (PrivateKey privateKey) {
+    public void setSigningKey(PrivateKey privateKey) {
         this.signingKey = privateKey;
     }
 
 
 /** sf:> This seems like more Core buggery to me. What sort of TX remains valid without proper SighashType ???
-     *
-     * This is required for signatures which use a sigHashType which cannot be represented using SigHash and anyoneCanPay
-     * See transaction c99c49da4c38af669dea436d3e73780dfdb6c1ecf9958baa52960e8baee30e73, which has sigHashType 0
-     */
+ *
+ * This is required for signatures which use a sigHashType which cannot be represented using SigHash and anyoneCanPay
+ * See transaction c99c49da4c38af669dea436d3e73780dfdb6c1ecf9958baa52960e8baee30e73, which has sigHashType 0
+ */
 //    public Sha256Hash hashForSignature(Transaction txn, int inputIndex, byte[] connectedScript, byte sigHashType) {
 //
 //    }

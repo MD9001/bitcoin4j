@@ -22,67 +22,70 @@ import org.twostack.bitcoin4j.Utils;
 import org.twostack.bitcoin4j.VarInt;
 import org.twostack.bitcoin4j.exception.VerificationException;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class Transaction {
 
-    private long version = 1;
-    private long nLockTime = 0;
-    private ArrayList<TransactionInput> inputs = new ArrayList<>();
-    private ArrayList<TransactionOutput> outputs = new ArrayList<>();
-
     /// Max value for an unsigned 32 bit value
     public static final long NLOCKTIME_MAX_VALUE = 4294967295L;
-
     public static final long MAX_COINS = 21000000;
-    /// max amount of bitcoins in circulation
-
-    private static final int SMALLEST_UNIT_EXPONENT = 8;
-    private static final long COIN_VALUE = LongMath.pow(10, SMALLEST_UNIT_EXPONENT);
-
-    public static final long MAX_MONEY = LongMath.checkedMultiply(COIN_VALUE, MAX_COINS);
-
-    /** Threshold for lockTime: below this value it is interpreted as block number, otherwise as timestamp. **/
+    /**
+     * Threshold for lockTime: below this value it is interpreted as block number, otherwise as timestamp.
+     **/
     public static final int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
-
-    /** TODO: Same but as a BigInteger for CHECKLOCKTIMEVERIFY */
+    /**
+     * TODO: Same but as a BigInteger for CHECKLOCKTIMEVERIFY
+     */
     public static final BigInteger LOCKTIME_THRESHOLD_BIG = BigInteger.valueOf(LOCKTIME_THRESHOLD);
-
-    /** How many bytes a transaction can be before it won't be relayed anymore. Currently 100kb. */
+    /**
+     * How many bytes a transaction can be before it won't be relayed anymore. Currently 100kb.
+     */
     public static final int MAX_STANDARD_TX_SIZE = 100000;
+    private static final int SMALLEST_UNIT_EXPONENT = 8;
+    /// max amount of bitcoins in circulation
+    private static final long COIN_VALUE = LongMath.pow(10, SMALLEST_UNIT_EXPONENT);
+    public static final long MAX_MONEY = LongMath.checkedMultiply(COIN_VALUE, MAX_COINS);
+    private long version = 1;
+    private long nLockTime = 0;
+    private final ArrayList<TransactionInput> inputs = new ArrayList<>();
+    private final ArrayList<TransactionOutput> outputs = new ArrayList<>();
 
-    public Transaction(){
+    public Transaction() {
 
     }
 
     /*
     Creates a Transaction from an array of bytes
      */
-    public Transaction(ByteBuffer buffer){
+    public Transaction(ByteBuffer buffer) {
         parseBuffer(buffer);
     }
 
     public static Transaction fromStream(InputStream is) throws IOException {
-        int i; int sizeTxIns; int sizeTxOuts; long nLocktime;
+        int i;
+        int sizeTxIns;
+        int sizeTxOuts;
+        long nLocktime;
 
         ArrayList<TransactionInput> inputs = new ArrayList<>();
         ArrayList<TransactionOutput> outputs = new ArrayList<>();
 
         long version = Utils.readUint32FromStream(is);
         sizeTxIns = VarInt.fromStream(is).intValue();
-        for (i = 0; i< sizeTxIns; i++){
+        for (i = 0; i < sizeTxIns; i++) {
             TransactionInput txInput = TransactionInput.fromStream(is);
             inputs.add(txInput);
         }
 
         sizeTxOuts = VarInt.fromStream(is).intValue();
-        for (i = 0; i< sizeTxOuts; i++){
+        for (i = 0; i < sizeTxOuts; i++) {
             TransactionOutput txOutput = TransactionOutput.fromStream(is);
             outputs.add(txOutput);
         }
@@ -109,7 +112,7 @@ public class Transaction {
         return new Transaction(buffer);
     }
 
-    private void parseBuffer(ByteBuffer buffer){
+    private void parseBuffer(ByteBuffer buffer) {
 
         ReadUtils reader = new ReadUtils(buffer.array());
 
@@ -144,12 +147,12 @@ public class Transaction {
         os.write(varInt.encode());
 
         // write the inputs
-        inputs.forEach( (input) ->  {
+        inputs.forEach((input) -> {
             try {
                 byte[] buf = input.serialize();
                 os.write(buf);
 
-            }catch(IOException ex){
+            } catch (IOException ex) {
                 System.out.println(ex.getMessage()); //FIXME: !!
             }
         });
@@ -162,7 +165,7 @@ public class Transaction {
         outputs.forEach((output) -> {
             try {
                 os.write(output.serialize());
-            }catch(IOException ex){
+            } catch (IOException ex) {
                 System.out.println(ex.getMessage()); //FIXME: !!!
             }
         });
@@ -201,7 +204,7 @@ public class Transaction {
 
             String outpointId = Utils.HEX.encode(input.getPrevTxnId()) + ":" + input.getPrevTxnOutputIndex();
 
-            if (outpoints.contains(outpointId)){
+            if (outpoints.contains(outpointId)) {
                 throw new VerificationException.DuplicatedOutPoint();
             }
 
@@ -225,7 +228,7 @@ public class Transaction {
 
         if (isCoinBase()) {
             int progLength = inputs.get(0).getScriptSig().getProgram().length;
-            if (progLength < 2 ||  progLength > 100)
+            if (progLength < 2 || progLength > 100)
                 throw new VerificationException.CoinbaseScriptSizeOutOfRange();
         } else {
             for (TransactionInput input : inputs)
@@ -246,7 +249,9 @@ public class Transaction {
     }
 
 
-    /** Returns an unmodifiable view of all inputs. */
+    /**
+     * Returns an unmodifiable view of all inputs.
+     */
     public List<TransactionInput> getInputs() {
         return Collections.unmodifiableList(inputs);
     }
@@ -255,7 +260,7 @@ public class Transaction {
         outputs.set(index, txout);
     }
 
-    public TransactionInput replaceInput(int index, TransactionInput input){
+    public TransactionInput replaceInput(int index, TransactionInput input) {
         return inputs.set(index, input);
     }
 
@@ -267,22 +272,24 @@ public class Transaction {
         outputs.clear();
     }
 
-    /** Returns an unmodifiable view of all outputs. */
+    /**
+     * Returns an unmodifiable view of all outputs.
+     */
     public List<TransactionOutput> getOutputs() {
         return Collections.unmodifiableList(outputs);
     }
 
-    public String getTransactionId(){
+    public String getTransactionId() {
         byte[] idBytes = getTransactionIdBytes();
         return Utils.HEX.encode(Utils.reverseBytes(idBytes));
     }
 
-    public byte[] getTransactionIdBytes(){
+    public byte[] getTransactionIdBytes() {
 
         byte[] rawTx = new byte[]{};
         try {
             rawTx = this.serialize();
-        }catch(IOException ex){
+        } catch (IOException ex) {
 
         }
 

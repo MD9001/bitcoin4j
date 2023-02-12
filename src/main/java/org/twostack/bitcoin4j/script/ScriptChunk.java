@@ -33,7 +33,9 @@ import static org.twostack.bitcoin4j.script.ScriptOpCodes.*;
  * A script element that is either a data push (signature, pubkey, etc) or a non-push (logic, numeric, etc) operation.
  */
 public class ScriptChunk {
-    /** Operation to be executed. Opcodes are defined in {@link ScriptOpCodes}. */
+    /**
+     * Operation to be executed. Opcodes are defined in {@link ScriptOpCodes}.
+     */
     public final int opcode;
     /**
      * For push operations, this is the vector to be pushed on the stack. For {@link ScriptOpCodes#OP_0}, the vector is
@@ -65,7 +67,9 @@ public class ScriptChunk {
         return opcode <= OP_16;
     }
 
-    /** If this chunk is an OP_N opcode returns the equivalent integer value. */
+    /**
+     * If this chunk is an OP_N opcode returns the equivalent integer value.
+     */
     public int decodeOpN() {
         return Script.decodeFromOpN(opcode);
     }
@@ -153,7 +157,7 @@ public class ScriptChunk {
         return opcodeLength + pushDataSizeLength + dataLength;
     }
 
-    public String toEncodedString(boolean asm){
+    public String toEncodedString(boolean asm) {
 
         StringBuffer str = new StringBuffer();
         if (data == null || data.length <= 0) {
@@ -171,20 +175,20 @@ public class ScriptChunk {
                         // OP_1NEGATE -> 1
                         str.append("-1");
                     } else {
-                        str.append( "OP_" + ScriptOpCodes.getOpCodeName(opcode));
+                        str.append("OP_" + ScriptOpCodes.getOpCodeName(opcode));
                     }
                 } else {
-                    str.append(  "OP_" + ScriptOpCodes.getOpCodeName(opcode));
+                    str.append("OP_" + ScriptOpCodes.getOpCodeName(opcode));
                 }
             } else {
-                String numstr =  Integer.toHexString(opcode);
+                String numstr = Integer.toHexString(opcode);
 
                 //uneven numbers get padded with a leading zero
                 if (numstr.length() % 2 != 0) {
                     numstr = "0" + numstr;
                 }
                 if (asm) {
-                    str.append( numstr);
+                    str.append(numstr);
                 } else {
                     str.append("0x" + numstr);
                 }
@@ -194,7 +198,7 @@ public class ScriptChunk {
             if (!asm && (opcode == ScriptOpCodes.OP_PUSHDATA1 ||
                     opcode == ScriptOpCodes.OP_PUSHDATA2 ||
                     opcode == ScriptOpCodes.OP_PUSHDATA4)) {
-                str.append( "OP_" +  ScriptOpCodes.getOpCodeName(opcode) + " ");
+                str.append("OP_" + ScriptOpCodes.getOpCodeName(opcode) + " ");
             }
             if (data.length > 0) {
                 if (asm) {

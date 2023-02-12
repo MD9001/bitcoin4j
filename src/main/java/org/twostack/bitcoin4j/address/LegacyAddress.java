@@ -49,7 +49,9 @@ public class LegacyAddress extends Address {
      */
     public static final int LENGTH = 20;
 
-    /** True if P2SH, false if P2PKH. */
+    /**
+     * True if P2SH, false if P2PKH.
+     */
     public final boolean p2sh;
 
 
@@ -58,12 +60,9 @@ public class LegacyAddress extends Address {
      * {@link #fromPubKeyHash(NetworkAddressType, byte[])}, {@link #fromScriptHash(NetworkType, byte[])} or
      * {@link #fromKey(NetworkAddressType, PublicKey)}.
      *
-     * @param addressType
-     *            network this address is valid for
-     * @param p2sh
-     *            true if hash160 is hash of a script, false if it is hash of a pubkey
-     * @param hash160
-     *            20-byte hash of pubkey or script
+     * @param addressType network this address is valid for
+     * @param p2sh        true if hash160 is hash of a script, false if it is hash of a pubkey
+     * @param hash160     20-byte hash of pubkey or script
      */
     private LegacyAddress(NetworkAddressType addressType, boolean p2sh, byte[] hash160) throws AddressFormatException {
         super(addressType, hash160);
@@ -76,11 +75,9 @@ public class LegacyAddress extends Address {
     /**
      * Construct a {@link LegacyAddress} that represents the given pubkey hash. The resulting address will be a P2PKH type of
      * address.
-     * 
-     * @param networkAddressType
-     *            network this address is valid for
-     * @param hash160
-     *            20-byte pubkey hash
+     *
+     * @param networkAddressType network this address is valid for
+     * @param hash160            20-byte pubkey hash
      * @return constructed address
      */
     public static LegacyAddress fromPubKeyHash(NetworkAddressType networkAddressType, byte[] hash160) throws AddressFormatException {
@@ -90,11 +87,9 @@ public class LegacyAddress extends Address {
     /**
      * Construct a {@link LegacyAddress} that represents the public part of the given {@link ECKey}. Note that an address is
      * derived from a hash of the public key and is not the public key itself.
-     * 
-     * @param networkAddressType
-     *            network this address is valid for
-     * @param key
-     *            only the public part is used
+     *
+     * @param networkAddressType network this address is valid for
+     * @param key                only the public part is used
      * @return constructed address
      */
     public static LegacyAddress fromKey(NetworkAddressType networkAddressType, PublicKey key) {
@@ -103,18 +98,16 @@ public class LegacyAddress extends Address {
 
     /**
      * Construct a {@link LegacyAddress} that represents the given P2SH script hash.
-     * 
-     * @param networkType
-     *            network this address is valid for
-     * @param hash160
-     *            P2SH script hash
+     *
+     * @param networkType network this address is valid for
+     * @param hash160     P2SH script hash
      * @return constructed address
      */
     public static LegacyAddress fromScriptHash(NetworkType networkType, byte[] hash160) throws AddressFormatException {
 
-        if (networkType == NetworkType.MAIN){
+        if (networkType == NetworkType.MAIN) {
             return new LegacyAddress(NetworkAddressType.MAIN_P2SH, true, hash160);
-        }else{
+        } else {
             return new LegacyAddress(NetworkAddressType.TEST_P2SH, true, hash160);
         }
 
@@ -122,21 +115,15 @@ public class LegacyAddress extends Address {
 
     /**
      * Construct a {@link LegacyAddress} from its base58 form.
-     * 
-     * @param networkType
-     *            expected network this address is valid for, or null if if the network should be derived from the
-     *            base58
-     * @param base58
-     *            base58-encoded textual form of the address
-     * @throws AddressFormatException
-     *             if the given base58 doesn't parse or the checksum is invalid
-     * @throws AddressFormatException.WrongNetwork
-     *             if the given address is valid but for a different chain (eg testnet vs mainnet)
      *
+     * @param networkType expected network this address is valid for, or null if if the network should be derived from the
+     *                    base58
+     * @param base58      base58-encoded textual form of the address
      * @return a LegacyAddress instance conforming to the provided {@link NetworkType}
+     * @throws AddressFormatException              if the given base58 doesn't parse or the checksum is invalid
+     * @throws AddressFormatException.WrongNetwork if the given address is valid but for a different chain (eg testnet vs mainnet)
      */
-    public static LegacyAddress fromBase58(@Nullable NetworkType networkType, String base58)
-            throws AddressFormatException {
+    public static LegacyAddress fromBase58(@Nullable NetworkType networkType, String base58) throws AddressFormatException {
         byte[] versionAndDataBytes = Base58.decodeChecked(base58);
         int version = versionAndDataBytes[0] & 0xFF;
         byte[] bytes = Arrays.copyOfRange(versionAndDataBytes, 1, versionAndDataBytes.length);
@@ -145,63 +132,21 @@ public class LegacyAddress extends Address {
             NetworkAddressType derivedType = NetworkParameters.getNetworkAddressType(version);
             return new LegacyAddress(derivedType, false, bytes);
         } else {
-
             AddressType versionType = NetworkParameters.getAddressType(version);
             NetworkAddressType versionAddressType = NetworkParameters.getNetworkAddressType(version);
 
-            if (! NetworkParameters.getNetworkTypes(version).contains(networkType))
+            if (!NetworkParameters.getNetworkTypes(version).contains(networkType))
                 throw new AddressFormatException.WrongNetwork(version);
 
-            if (versionType == AddressType.PUBKEY_HASH){
+            if (versionType == AddressType.PUBKEY_HASH) {
                 return new LegacyAddress(versionAddressType, false, bytes);
-            }else if(versionType == AddressType.SCRIPT_HASH){
+            } else if (versionType == AddressType.SCRIPT_HASH) {
                 return new LegacyAddress(versionAddressType, true, bytes);
             }
 
             throw new AddressFormatException.WrongNetwork(version);
         }
-
     }
-
-    /**
-     * Get the version header of an address. This is the first byte of a base58 encoded address.
-     * 
-     * @return version header as one byte
-     */
-    public int getVersion() {
-        return NetworkParameters.getNetworkVersion(networkAddressType);
-    }
-
-    /**
-     * Returns the base58-encoded textual form, including version and checksum bytes.
-     * 
-     * @return textual form
-     */
-    public String toBase58() {
-        return Base58.encodeChecked(getVersion(), bytes);
-    }
-
-    /** The (big endian) 20 byte hash that is the core of a Bitcoin address. */
-    @Override
-    public byte[] getHash() {
-        return bytes;
-    }
-
-    /**
-     * Get the type of output script that will be used for sending to the address. This is either
-     * {@link ScriptType#P2PKH} or {@link ScriptType#P2SH}.
-     * 
-     * @return type of output script
-     */
-    @Override
-    public ScriptType getOutputScriptType() {
-        if (networkAddressType == NetworkAddressType.MAIN_P2SH || networkAddressType == NetworkAddressType.TEST_P2SH){
-            return ScriptType.P2SH;
-        }else{
-            return ScriptType.P2PKH;
-        }
-    }
-
 
     /**
      * Given an address, examines the version byte and attempts to find a matching NetworkParameters. If you aren't sure
@@ -209,7 +154,6 @@ public class LegacyAddress extends Address {
      * compatible with the current wallet.
      *
      * @param address the base58-encoded bitcoin address from which to construct the {@link NetworkAddressType}
-     *
      * @return network the address is valid for
      * @throws AddressFormatException if the given base58 doesn't parse or the checksum is invalid
      */
@@ -218,17 +162,57 @@ public class LegacyAddress extends Address {
     }
 
     /**
+     * Get the version header of an address. This is the first byte of a base58 encoded address.
+     *
+     * @return version header as one byte
+     */
+    public int getVersion() {
+        return NetworkParameters.getNetworkVersion(networkAddressType);
+    }
+
+    /**
+     * Returns the base58-encoded textual form, including version and checksum bytes.
+     *
+     * @return textual form
+     */
+    public String toBase58() {
+        return Base58.encodeChecked(getVersion(), bytes);
+    }
+
+    /**
+     * The (big endian) 20 byte hash that is the core of a Bitcoin address.
+     */
+    @Override
+    public byte[] getHash() {
+        return bytes;
+    }
+
+    /**
+     * Get the type of output script that will be used for sending to the address. This is either
+     * {@link ScriptType#P2PKH} or {@link ScriptType#P2SH}.
+     *
+     * @return type of output script
+     */
+    @Override
+    public ScriptType getOutputScriptType() {
+        if (networkAddressType == NetworkAddressType.MAIN_P2SH || networkAddressType == NetworkAddressType.TEST_P2SH) {
+            return ScriptType.P2SH;
+        } else {
+            return ScriptType.P2PKH;
+        }
+    }
+
+    /**
      * Given an address, examines the version byte and attempts to find a matching NetworkParameters. If you aren't sure
      * which network the address is intended for (eg, it was provided by a user), you can use this to decide if it is
      * compatible with the current wallet.
-     * 
+     *
      * @return network the address is valid for
      * @throws AddressFormatException if the given base58 doesn't parse or the checksum is invalid
      */
 //    public static NetworkParameters getParametersFromAddress(String address) throws AddressFormatException {
 //        return LegacyAddress.fromBase58(null, address).getParameters();
 //    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o)

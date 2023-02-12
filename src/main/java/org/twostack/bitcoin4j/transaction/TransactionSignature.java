@@ -26,7 +26,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 
 /**
  * A TransactionSignature wraps an {@link ECKey.ECDSASignature} and adds methods for handling
@@ -43,19 +42,22 @@ public class TransactionSignature extends ECKey.ECDSASignature {
     public final int sighashFlags;
 
 
-
 /**
  * A TransactionSignature wraps an {@link ECKey.ECDSASignature} and adds methods for handling
  * the additional SIGHASH mode byte that is used.
  */
 
 
-    /** Constructs a signature with the given components and SIGHASH_ALL. */
+    /**
+     * Constructs a signature with the given components and SIGHASH_ALL.
+     */
     public TransactionSignature(BigInteger r, BigInteger s) {
         this(r, s, SigHashType.ALL.value);
     }
 
-    /** Constructs a signature with the given components and raw sighash flag bytes (needed for rule compatibility). */
+    /**
+     * Constructs a signature with the given components and raw sighash flag bytes (needed for rule compatibility).
+     */
     public TransactionSignature(BigInteger r, BigInteger s, int sighashFlags) {
         super(r, s);
         this.sighashFlags = sighashFlags;
@@ -67,7 +69,9 @@ public class TransactionSignature extends ECKey.ECDSASignature {
         sighashFlags = calcSigHashValue(mode, anyoneCanPay, useForkId);
     }
 
-    /** Constructs a transaction signature based on the ECDSA signature. */
+    /**
+     * Constructs a transaction signature based on the ECDSA signature.
+     */
     public TransactionSignature(ECKey.ECDSASignature signature, SigHashType mode, boolean anyoneCanPay) {
         super(signature.r, signature.s);
         sighashFlags = calcSigHashValue(mode, anyoneCanPay);
@@ -76,7 +80,7 @@ public class TransactionSignature extends ECKey.ECDSASignature {
     public static TransactionSignature fromTxFormat(byte[] sigBytes) throws SignatureDecodeException {
 
         //allow empty signatures
-        if (sigBytes.length == 0){
+        if (sigBytes.length == 0) {
             return new TransactionSignature(BigInteger.ONE, BigInteger.ONE, 1);
         }
 
@@ -102,7 +106,9 @@ public class TransactionSignature extends ECKey.ECDSASignature {
     }
 
 
-    /** Calculates the byte used in the protocol to represent the combination of mode and anyoneCanPay. */
+    /**
+     * Calculates the byte used in the protocol to represent the combination of mode and anyoneCanPay.
+     */
     public static int calcSigHashValue(SigHashType mode, boolean anyoneCanPay) {
         Preconditions.checkArgument(SigHashType.ALL == mode || SigHashType.NONE == mode || SigHashType.SINGLE == mode); // enforce compatibility since this code was made before the SigHash enum was updated
         int sighashFlags = mode.value;
@@ -117,7 +123,7 @@ public class TransactionSignature extends ECKey.ECDSASignature {
         int sighashFlags = mode.value;
         if (anyoneCanPay)
             sighashFlags |= SigHashType.ANYONECANPAY.value;
-        if(useForkId)
+        if (useForkId)
             sighashFlags |= SigHashType.FORKID.value;
         return sighashFlags;
     }
@@ -127,7 +133,7 @@ public class TransactionSignature extends ECKey.ECDSASignature {
      * Returns a decoded signature.
      *
      * @param requireCanonicalEncoding if the encoding of the signature must
-     * be canonical.
+     *                                 be canonical.
      * @throws RuntimeException if the signature is invalid or unparseable in some way.
      * @deprecated use {@link #decodeFromBitcoin(byte[], boolean, boolean)} instead.
      */
@@ -141,11 +147,11 @@ public class TransactionSignature extends ECKey.ECDSASignature {
      * Returns a decoded signature.
      *
      * @param requireCanonicalEncoding if the encoding of the signature must
-     * be canonical.
-     * @param requireCanonicalSValue if the S-value must be canonical (below half
-     * the order of the curve).
+     *                                 be canonical.
+     * @param requireCanonicalSValue   if the S-value must be canonical (below half
+     *                                 the order of the curve).
      * @throws SignatureDecodeException if the signature is unparseable in some way.
-     * @throws VerificationException if the signature is invalid.
+     * @throws VerificationException    if the signature is invalid.
      */
     public static TransactionSignature decodeFromBitcoin(byte[] bytes, boolean requireCanonicalEncoding, boolean requireCanonicalSValue) throws SignatureDecodeException, VerificationException {
         // Bitcoin encoding is DER signature + sighash byte.
@@ -185,55 +191,52 @@ public class TransactionSignature extends ECKey.ECDSASignature {
         if (signature.length < 9 || signature.length > 73)
             return false;
 
-        int hashType = (signature[signature.length-1] & 0xff) & ~SigHashType.ANYONECANPAY.value; // mask the byte to prevent sign-extension hurting us
+        int hashType = (signature[signature.length - 1] & 0xff) & ~SigHashType.ANYONECANPAY.value; // mask the byte to prevent sign-extension hurting us
         if (hashType < SigHashType.ALL.value || hashType > SigHashType.SINGLE.value)
             return false;
 
         //                   "wrong type"                  "wrong length marker"
-        if ((signature[0] & 0xff) != 0x30 || (signature[1] & 0xff) != signature.length-3)
+        if ((signature[0] & 0xff) != 0x30 || (signature[1] & 0xff) != signature.length - 3)
             return false;
 
         int lenR = signature[3] & 0xff;
         if (5 + lenR >= signature.length || lenR == 0)
             return false;
-        int lenS = signature[5+lenR] & 0xff;
+        int lenS = signature[5 + lenR] & 0xff;
         if (lenR + lenS + 7 != signature.length || lenS == 0)
             return false;
 
         //    R value type mismatch          R value negative
-        if (signature[4-2] != 0x02 || (signature[4] & 0x80) == 0x80)
+        if (signature[4 - 2] != 0x02 || (signature[4] & 0x80) == 0x80)
             return false;
-        if (lenR > 1 && signature[4] == 0x00 && (signature[4+1] & 0x80) != 0x80)
+        if (lenR > 1 && signature[4] == 0x00 && (signature[4 + 1] & 0x80) != 0x80)
             return false; // R value excessively padded
 
         //       S value type mismatch                    S value negative
         if (signature[6 + lenR - 2] != 0x02 || (signature[6 + lenR] & 0x80) == 0x80)
             return false;
-        if (lenS > 1 && signature[6 + lenR] == 0x00 && (signature[6 + lenR + 1] & 0x80) != 0x80)
-            return false; // S value excessively padded
+        return lenS <= 1 || signature[6 + lenR] != 0x00 || (signature[6 + lenR + 1] & 0x80) == 0x80; // S value excessively padded
+    }
 
-        return true;
+    public static boolean hasForkId(byte[] signature) {
+
+        if (signature.length == 0) {
+            return false;
+        }
+
+        int forkId = (signature[signature.length - 1] & 0xff) & SigHashType.FORKID.value; // mask the byte to prevent sign-extension hurting us
+
+        return forkId == SigHashType.FORKID.value;
     }
 
     public byte[] getSignatureBytes() {
         return encodeToDER();
     }
 
-    public static boolean hasForkId (byte[] signature)
-    {
-
-        if (signature.length == 0){
-            return false;
-        }
-
-        int forkId = (signature[signature.length-1] & 0xff) & SigHashType.FORKID.value; // mask the byte to prevent sign-extension hurting us
-
-        return forkId == SigHashType.FORKID.value;
-    }
-
     public boolean anyoneCanPay() {
         return (sighashFlags & SigHashType.ANYONECANPAY.value) != 0;
     }
+
     public boolean useForkId() {
         return (sighashFlags & SigHashType.FORKID.value) != 0;
     }
@@ -267,7 +270,6 @@ public class TransactionSignature extends ECKey.ECDSASignature {
     public ECKey.ECDSASignature toCanonicalised() {
         return new TransactionSignature(super.toCanonicalised(), sigHashMode(), anyoneCanPay(), useForkId());
     }
-
 
 
     public byte[] toTxFormat() throws IOException {

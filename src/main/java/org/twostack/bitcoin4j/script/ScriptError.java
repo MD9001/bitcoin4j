@@ -36,7 +36,7 @@ public enum ScriptError {
     SCRIPT_ERR_SIGHASH_FORKID("SIGHASH_FORKID"),
     SCRIPT_ERR_MUST_USE_FORKID("MUST_USE_FORKID"),
 
-                    /* Max sizes */
+    /* Max sizes */
     SCRIPT_ERR_SCRIPT_SIZE("SCRIPT_SIZE"),
     SCRIPT_ERR_PUSH_SIZE("PUSH_SIZE"),
     SCRIPT_ERR_OP_COUNT("OP_COUNT"),
@@ -90,12 +90,7 @@ public enum ScriptError {
 
     SCRIPT_ERR_ERROR_COUNT("ERROR_COUNT");
 
-    private final String mnemonic;
     private static final Map<String, ScriptError> mnemonicToScriptErrorMap;
-
-    private ScriptError(String name) {
-        this.mnemonic = name;
-    }
 
     static {
         mnemonicToScriptErrorMap = new HashMap<>();
@@ -104,8 +99,10 @@ public enum ScriptError {
         }
     }
 
-    public String getMnemonic() {
-        return mnemonic;
+    private final String mnemonic;
+
+    ScriptError(String name) {
+        this.mnemonic = name;
     }
 
     public static ScriptError fromMnemonic(String name) {
@@ -113,5 +110,9 @@ public enum ScriptError {
         if (err == null)
             throw new IllegalArgumentException(name + " is not a valid name");
         return err;
+    }
+
+    public String getMnemonic() {
+        return mnemonic;
     }
 }

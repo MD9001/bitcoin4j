@@ -29,7 +29,17 @@ public class TransactionOutput {
 
     private BigInteger satoshis = BigInteger.ZERO;
 
-    private LockingScriptBuilder _lockingScriptBuilder;
+    private final LockingScriptBuilder _lockingScriptBuilder;
+
+    public TransactionOutput(BigInteger satoshis, LockingScriptBuilder builder) {
+        this.satoshis = satoshis;
+        this._lockingScriptBuilder = builder;
+    }
+
+    public TransactionOutput(BigInteger satoshis, Script script) {
+        this.satoshis = satoshis;
+        this._lockingScriptBuilder = new DefaultLockBuilder(script);
+    }
 
     public static TransactionOutput fromReader(ReadUtils reader) {
 
@@ -43,16 +53,6 @@ public class TransactionOutput {
         }
 
         return new TransactionOutput(satoshis, script);
-    }
-
-    public TransactionOutput(BigInteger satoshis, LockingScriptBuilder builder){
-        this.satoshis = satoshis;
-        this._lockingScriptBuilder = builder;
-    }
-
-    public TransactionOutput(BigInteger satoshis, Script script){
-        this.satoshis = satoshis;
-        this._lockingScriptBuilder = new DefaultLockBuilder(script);
     }
 
     public static TransactionOutput fromByteBuffer(byte[] buffer) {
@@ -101,6 +101,7 @@ public class TransactionOutput {
     public BigInteger getAmount() {
         return satoshis;
     }
+
     public void setAmount(BigInteger amount) {
         this.satoshis = amount;
     }

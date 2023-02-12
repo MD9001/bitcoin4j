@@ -1,14 +1,12 @@
 package org.twostack.bitcoin4j.block;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import org.twostack.bitcoin4j.Sha256Hash;
 import org.twostack.bitcoin4j.UnsafeByteArrayOutputStream;
 import org.twostack.bitcoin4j.Utils;
 import org.twostack.bitcoin4j.VarInt;
 import org.twostack.bitcoin4j.exception.ProtocolException;
-import org.twostack.bitcoin4j.transaction.ReadUtils;
 import org.twostack.bitcoin4j.transaction.Transaction;
 
 import javax.annotation.Nullable;
@@ -19,8 +17,6 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
 
 import static org.twostack.bitcoin4j.Sha256Hash.hashTwice;
 
@@ -35,17 +31,18 @@ import static org.twostack.bitcoin4j.Sha256Hash.hashTwice;
  */
 public class Block {
 
-    // Blocks can be encoded in a way that will use more bytes than is optimal (due to VarInts having multiple encodings)
-    // MAX_BLOCK_SIZE must be compared to the optimal encoding, not the actual encoding, so when parsing, we keep track
-    // of the size of the ideal encoding in addition to the actual message size (which Message needs)
-    protected int optimalEncodingMessageSize;
-
     /**
      * How many bytes are required to represent a block header WITHOUT the trailing 00 length byte.
      */
     public static final int HEADER_SIZE = 80;
-
-    static final long ALLOWED_TIME_DRIFT = 2 * 60 * 60; // Same value as Bitcoin Core.
+    /**
+     * A value for difficultyTarget (nBits) that allows half of all possible hash solutions. Used in unit testing.
+     */
+    public static final long EASIEST_DIFFICULTY_TARGET = 0x207fFFFFL;
+    /**
+     * Value to use if the block height is unknown
+     */
+    public static final int BLOCK_HEIGHT_UNKNOWN = -1;
 
     /**
      * Legacy. Still applies to BTC. BSV has unbounded blocks
@@ -55,21 +52,10 @@ public class Block {
      * avoid somebody creating a titanically huge but valid block and forcing everyone to download/store it forever.
      public static final int MAX_BLOCK_SIZE = 1 * 1000 * 1000;
      */
-
-    /**
-     * A value for difficultyTarget (nBits) that allows half of all possible hash solutions. Used in unit testing.
-     */
-    public static final long EASIEST_DIFFICULTY_TARGET = 0x207fFFFFL;
-
-    /**
-     * Value to use if the block height is unknown
-     */
-    public static final int BLOCK_HEIGHT_UNKNOWN = -1;
     /**
      * Height of the first block
      */
     public static final int BLOCK_HEIGHT_GENESIS = 0;
-
     public static final long BLOCK_VERSION_GENESIS = 1;
     /**
      * Block version introduced in BIP 34: Height in coinbase
@@ -83,7 +69,21 @@ public class Block {
      * Block version introduced in BIP 65: OP_CHECKLOCKTIMEVERIFY
      */
     public static final long BLOCK_VERSION_BIP65 = 4;
-
+    static final long ALLOWED_TIME_DRIFT = 2 * 60 * 60; // Same value as Bitcoin Core.
+    // Blocks can be encoded in a way that will use more bytes than is optimal (due to VarInts having multiple encodings)
+    // MAX_BLOCK_SIZE must be compared to the optimal encoding, not the actual encoding, so when parsing, we keep track
+    // of the size of the ideal encoding in addition to the actual message size (which Message needs)
+    protected int optimalEncodingMessageSize;
+    protected boolean headerBytesValid;
+    protected boolean transactionBytesValid;
+    // The raw message payload bytes themselves.
+    protected byte[] payload;
+    // The cursor keeps track of where we are in the byte array as we parse it.
+    // Note that it's relative to the start of the array NOT the start of the message payload.
+    protected int cursor;
+    List<Sha256Hash> txids;
+    @VisibleForTesting
+    List<Transaction> transactions;
     // Fields defined as part of the protocol format.
     private long version;
     private Sha256Hash prevBlockHash;
@@ -91,27 +91,10 @@ public class Block {
     private long time;
     private long difficultyTarget; // "nBits"
     private long nonce;
-
     /**
      * Stores the hash of the block. If null, getHash() will recalculate it.
      */
     private Sha256Hash blockHash;
-
-    protected boolean headerBytesValid;
-    protected boolean transactionBytesValid;
-
-
-    // The raw message payload bytes themselves.
-    protected byte[] payload;
-
-    // The cursor keeps track of where we are in the byte array as we parse it.
-    // Note that it's relative to the start of the array NOT the start of the message payload.
-    protected int cursor;
-
-    List<Sha256Hash> txids;
-
-    @VisibleForTesting
-    List<Transaction> transactions;
 
     public Block(long version, Sha256Hash prevBlockHash, Sha256Hash merkleRoot, long time,
                  long difficultyTarget, long nonce, List<Transaction> transactions) {
@@ -316,7 +299,13 @@ public class Block {
         return blockHash;
     }
 
-
+    /**
+     * Returns an immutable list of transactions held in this block, or null if this object represents just a header.
+     */
+    @Nullable
+    public List<Transaction> getTransactions() {
+        return transactions == null ? null : ImmutableList.copyOf(transactions);
+    }
 
     @VisibleForTesting
     public void setTransactions(List<Transaction> transactions) {
@@ -324,14 +313,9 @@ public class Block {
         this.transactions = transactions;
     }
 
-    /** Returns an immutable list of transactions held in this block, or null if this object represents just a header. */
-    @Nullable
-    public List<Transaction> getTransactions() {
-        return transactions == null ? null : ImmutableList.copyOf(transactions);
-    }
-
     /**
      * Returns the list of transaction id's for this block, building the list if necessary.
+     *
      * @return
      */
     public List<Sha256Hash> getTxIds() {
@@ -339,7 +323,7 @@ public class Block {
             if (transactions == null)
                 return null;
             List<Sha256Hash> ids = new ArrayList<>(transactions.size());
-            for (Transaction t: transactions)
+            for (Transaction t : transactions)
                 ids.add(Sha256Hash.wrap(t.getTransactionId()));
             txids = ids;
         }
@@ -376,7 +360,6 @@ public class Block {
     /**
      * Special handling to check if we have a valid byte array for both header
      * and transactions
-     *
      */
     public byte[] bitcoinSerialize() {
         ByteArrayOutputStream stream = new UnsafeByteArrayOutputStream();

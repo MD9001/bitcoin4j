@@ -5,13 +5,13 @@ import org.twostack.bitcoin4j.script.*;
 
 import java.util.List;
 
-public class P2PKUnlockBuilder extends UnlockingScriptBuilder{
+public class P2PKUnlockBuilder extends UnlockingScriptBuilder {
 
-    public P2PKUnlockBuilder(TransactionSignature signature){
+    public P2PKUnlockBuilder(TransactionSignature signature) {
         addSignature(signature);
     }
 
-    public P2PKUnlockBuilder(Script script){
+    public P2PKUnlockBuilder(Script script) {
         parse(script);
     }
 
@@ -25,13 +25,13 @@ public class P2PKUnlockBuilder extends UnlockingScriptBuilder{
             signature = getSignatures().get(0);
         }
 
-        if (signature == null){
+        if (signature == null) {
             return new ScriptBuilder().build(); //return empty script; otherwise we will barf on early serialize (prior to signing)
         }
 
         try {
             return new ScriptBuilder().data(signature.toTxFormat()).build();
-        }catch(Exception ex){
+        } catch (Exception ex) {
             System.out.println(ex.getMessage());
             ex.printStackTrace(); //FIXME: Handle more gracefully
             return new ScriptBuilder().build();
@@ -41,13 +41,13 @@ public class P2PKUnlockBuilder extends UnlockingScriptBuilder{
 
     private void parse(Script script) {
 
-        if (script == null){
-           throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Script value cannot be null.");
+        if (script == null) {
+            throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Script value cannot be null.");
         }
 
         List<ScriptChunk> chunkList = script.getChunks();
 
-        if (chunkList.size() != 1){
+        if (chunkList.size() != 1) {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Wrong number of data elements for P2PK ScriptSig");
         }
 
@@ -55,7 +55,7 @@ public class P2PKUnlockBuilder extends UnlockingScriptBuilder{
 
         try {
             signatures.add(TransactionSignature.fromTxFormat(sig));
-        }catch (SignatureDecodeException ex){
+        } catch (SignatureDecodeException ex) {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Script signature is invalid : " + ex.getMessage());
         }
 

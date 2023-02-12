@@ -31,6 +31,8 @@ import static org.twostack.bitcoin4j.script.ScriptOpCodes.*;
  * This is a Script pattern matcher with some typical script patterns
  */
 public class ScriptPattern {
+    private static final byte[] SEGWIT_COMMITMENT_HEADER = Utils.HEX.decode("aa21a9ed");
+
     /**
      * Returns true if this script is of the form {@code DUP HASH160 <pubkey hash> EQUALVERIFY CHECKSIG}, ie, payment to an
      * address like {@code 1VayNert3x1KzbpzMGt2qdqrAThiRovi8}. This form was originally intended for the case where you wish
@@ -52,9 +54,7 @@ public class ScriptPattern {
             return false;
         if (!chunks.get(3).equalsOpCode(OP_EQUALVERIFY))
             return false;
-        if (!chunks.get(4).equalsOpCode(OP_CHECKSIG))
-            return false;
-        return true;
+        return chunks.get(4).equalsOpCode(OP_CHECKSIG);
     }
 
     /**
@@ -94,9 +94,7 @@ public class ScriptPattern {
             return false;
         if (chunk1data.length != LegacyAddress.LENGTH)
             return false;
-        if (!chunks.get(2).equalsOpCode(OP_EQUAL))
-            return false;
-        return true;
+        return chunks.get(2).equalsOpCode(OP_EQUAL);
     }
 
     /**
@@ -125,9 +123,7 @@ public class ScriptPattern {
             return false;
         if (chunk0data.length <= 1)
             return false;
-        if (!chunks.get(1).equalsOpCode(OP_CHECKSIG))
-            return false;
-        return true;
+        return chunks.get(1).equalsOpCode(OP_CHECKSIG);
     }
 
     /**
@@ -137,7 +133,6 @@ public class ScriptPattern {
     public static byte[] extractKeyFromP2PK(Script script) {
         return script.chunks.get(0).data;
     }
-
 
     /**
      * Returns whether this script matches the format used for m-of-n multisig outputs:
@@ -170,8 +165,6 @@ public class ScriptPattern {
         return chunks.size() > 0 && chunks.get(0).equalsOpCode(ScriptOpCodes.OP_RETURN);
     }
 
-    private static final byte[] SEGWIT_COMMITMENT_HEADER = Utils.HEX.decode("aa21a9ed");
-
     /**
      * Returns whether this script matches the pattern for a segwit commitment (in an output of the coinbase
      * transaction).
@@ -185,9 +178,7 @@ public class ScriptPattern {
         byte[] chunkData = chunks.get(1).data;
         if (chunkData == null || chunkData.length != 36)
             return false;
-        if (!Arrays.equals(Arrays.copyOfRange(chunkData, 0, 4), SEGWIT_COMMITMENT_HEADER))
-            return false;
-        return true;
+        return Arrays.equals(Arrays.copyOfRange(chunkData, 0, 4), SEGWIT_COMMITMENT_HEADER);
     }
 
     /**

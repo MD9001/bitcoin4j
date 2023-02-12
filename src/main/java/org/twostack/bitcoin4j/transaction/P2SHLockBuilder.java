@@ -5,21 +5,19 @@ import org.twostack.bitcoin4j.script.*;
 
 import java.nio.ByteBuffer;
 
-public class P2SHLockBuilder extends LockingScriptBuilder{
-
+public class P2SHLockBuilder extends LockingScriptBuilder {
     ByteBuffer scriptHash;
 
-    public P2SHLockBuilder(ByteBuffer scriptHash){
+    public P2SHLockBuilder(ByteBuffer scriptHash) {
         this.scriptHash = scriptHash;
     }
 
-    public P2SHLockBuilder(Script script){
-
-        if (script != null){
-            byte[]  byteBuffer = Utils.sha256hash160(script.getProgram());
+    public P2SHLockBuilder(Script script) {
+        if (script != null) {
+            byte[] byteBuffer = Utils.sha256hash160(script.getProgram());
 
             this.scriptHash = ByteBuffer.wrap(byteBuffer);
-        }else{
+        } else {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Invalid script or malformed script");
         }
     }
@@ -27,7 +25,7 @@ public class P2SHLockBuilder extends LockingScriptBuilder{
     @Override
     public Script getLockingScript() {
 
-        if (scriptHash == null){
+        if (scriptHash == null) {
             return new ScriptBuilder().build();
         }
 

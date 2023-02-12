@@ -48,17 +48,13 @@ public abstract class Address extends PrefixedChecksummedBytes implements Compar
     /**
      * Construct an address from its textual form.
      *
-     * @param networkType
-     *            the expected network this address is valid for, or null if the network should be derived from the
-     *            textual form
-     * @param str
-     *            the textual form of the address, such as "17kzeh4N8g49GFvdDzSf8PjaPfyoD1MndL" or
-     *            "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+     * @param networkType the expected network this address is valid for, or null if the network should be derived from the
+     *                    textual form
+     * @param str         the textual form of the address, such as "17kzeh4N8g49GFvdDzSf8PjaPfyoD1MndL" or
+     *                    "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
      * @return constructed address
-     * @throws AddressFormatException
-     *             if the given string doesn't parse or the checksum is invalid
-     * @throws AddressFormatException.WrongNetwork
-     *             if the given string is valid but not for the expected network (eg testnet vs mainnet)
+     * @throws AddressFormatException              if the given string doesn't parse or the checksum is invalid
+     * @throws AddressFormatException.WrongNetwork if the given string is valid but not for the expected network (eg testnet vs mainnet)
      */
     public static Address fromString(@Nullable NetworkType networkType, String str) throws AddressFormatException {
         return LegacyAddress.fromBase58(networkType, str);
@@ -66,11 +62,9 @@ public abstract class Address extends PrefixedChecksummedBytes implements Compar
 
     /**
      * Construct an {@link Address} that represents the public part of the given {@link ECKey}.
-     * 
-     * @param networkType
-     *            network this address is valid for
-     * @param key
-     *            only the public part is used
+     *
+     * @param networkType network this address is valid for
+     * @param key         only the public part is used
      * @return constructed address
      */
     public static Address fromKey(final NetworkAddressType networkType, final PublicKey key) {
@@ -79,14 +73,14 @@ public abstract class Address extends PrefixedChecksummedBytes implements Compar
 
     /**
      * Get either the public key hash or script hash that is encoded in the address.
-     * 
+     *
      * @return hash that is encoded in the address
      */
     public abstract byte[] getHash();
 
     /**
      * Get the type of output script that will be used for sending to the address.
-     * 
+     *
      * @return type of output script
      */
     public abstract ScriptType getOutputScriptType();
@@ -110,7 +104,7 @@ public abstract class Address extends PrefixedChecksummedBytes implements Compar
 
     /**
      * FIXME: Is this needed in absence of Segwit ?
-     *
+     * <p>
      * Comparator for the first two comparison fields in {@code Address} comparisons, see {@link Address#compareTo(Address)}.
      * Used by {@link LegacyAddress#compareTo(Address)} and { SegwitAddress#compareTo(Address)}.
      *

@@ -47,7 +47,7 @@ public class TransactionInput {
         want to indicate that the transaction's [Transaction.nLockTime] should be ignored.
         This is a 64-bit value, in range 0 to (2^64) - 1
      */
-    public static long MAX_SEQ_NUMBER =  0xFFFFFFFFL;
+    public static long MAX_SEQ_NUMBER = 0xFFFFFFFFL;
 
     private long _sequenceNumber;
 
@@ -55,9 +55,9 @@ public class TransactionInput {
 
     private byte[] _prevTxnId = new byte[32];
 
-    private UnlockingScriptBuilder _unlockingScriptBuilder;
+    private final UnlockingScriptBuilder _unlockingScriptBuilder;
 
-    public TransactionInput(byte[] prevTxnId, long prevTxnOutputIndex, long sequenceNumber, UnlockingScriptBuilder unlocker){
+    public TransactionInput(byte[] prevTxnId, long prevTxnOutputIndex, long sequenceNumber, UnlockingScriptBuilder unlocker) {
         _prevTxnId = prevTxnId;
         _prevTxnOutputIndex = prevTxnOutputIndex;
         _sequenceNumber = sequenceNumber;
@@ -80,7 +80,7 @@ public class TransactionInput {
 
     }
 
-    public static TransactionInput fromReader(ReadUtils reader){
+    public static TransactionInput fromReader(ReadUtils reader) {
 
         byte[] prevTxnId = Utils.reverseBytes(reader.readBytes(32));
         long prevTxnOutputIndex = reader.readUint32();
@@ -124,7 +124,7 @@ public class TransactionInput {
      * Coinbase transactions have special inputs with hashes of zero. If this is such an input, returns true.
      */
     public boolean isCoinBase() {
-        return Arrays.equals(_prevTxnId, Sha256Hash.ZERO_HASH.getBytes() ) &&
+        return Arrays.equals(_prevTxnId, Sha256Hash.ZERO_HASH.getBytes()) &&
                 (_prevTxnOutputIndex & 0xFFFFFFFFL) == 0xFFFFFFFFL;  // -1 but all is serialized to the wire as unsigned int.
     }
 
@@ -132,8 +132,16 @@ public class TransactionInput {
         return _sequenceNumber;
     }
 
+    public void setSequenceNumber(long i) {
+        this._sequenceNumber = i;
+    }
+
     public long getPrevTxnOutputIndex() {
         return _prevTxnOutputIndex;
+    }
+
+    public void setPrevTxnOutputIndex(int i) {
+        this._prevTxnOutputIndex = i;
     }
 
     public byte[] getPrevTxnId() {
@@ -152,15 +160,7 @@ public class TransactionInput {
         this._unlockingScriptBuilder.script = script;
     }
 
-    public void setSequenceNumber(long i) {
-        this._sequenceNumber = i;
-    }
-
     public boolean isFinal() {
         return _sequenceNumber != MAX_SEQ_NUMBER;
-    }
-
-    public void setPrevTxnOutputIndex(int i) {
-        this._prevTxnOutputIndex = i;
     }
 }

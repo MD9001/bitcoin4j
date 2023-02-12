@@ -36,9 +36,9 @@ import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static org.twostack.bitcoin4j.Utils.HEX;
 import static org.twostack.bitcoin4j.script.ScriptOpCodes.*;
-import static com.google.common.base.Preconditions.*;
 
 /**
  * <p>Programs embedded inside transactions that control redemption of payments.</p>
@@ -54,64 +54,36 @@ import static com.google.common.base.Preconditions.*;
 public class Script {
 
 
-    /** Enumeration to encapsulate the type of this script. */
-    public enum ScriptType {
-        P2PKH(1), // pay to pubkey hash (aka pay to address)
-        P2PK(2), // pay to pubkey
-        P2SH(3); // pay to script hash
-
-        public final int id;
-
-        private ScriptType(int id) {
-            this.id = id;
-        }
-    }
-
-    /** Flags to pass to {Script#correctlySpends(Transaction, int, Coin, Script, Set)}.
-     * Note currently only P2SH, DERSIG and NULLDUMMY are actually supported.
-     */
-    public enum VerifyFlag {
-        P2SH, // Enable BIP16-style subscript evaluation.
-        STRICTENC, // Passing a non-strict-DER signature or one with undefined hashtype to a checksig operation causes script failure.
-        DERSIG, // Passing a non-strict-DER signature to a checksig operation causes script failure (softfork safe, BIP66 rule 1)
-        LOW_S, // Passing a non-strict-DER signature or one with S > order/2 to a checksig operation causes script failure
-        NULLDUMMY, // Verify dummy stack item consumed by CHECKMULTISIG is of zero-length.
-        SIGPUSHONLY, // Using a non-push operator in the scriptSig causes script failure (softfork safe, BIP62 rule 2).
-        MINIMALDATA, // Require minimal encodings for all push operations and number encodings
-        DISCOURAGE_UPGRADABLE_NOPS, // Discourage use of NOPs reserved for upgrades (NOP1-10)
-        CLEANSTACK, // Require that only a single stack element remains after evaluation.
-        CHECKLOCKTIMEVERIFY, // Enable CHECKLOCKTIMEVERIFY operation
-        CHECKSEQUENCEVERIFY,
-        SIGHASH_FORKID,
-        MONOLITH_OPCODES, // May 15, 2018 Hard fork
-        UTXO_AFTER_GENESIS,
-        MINIMALIF,
-        NULLFAIL,
-        COMPRESSED_PUBKEYTYPE
-    }
     public static final EnumSet<VerifyFlag> ALL_VERIFY_FLAGS = EnumSet.allOf(VerifyFlag.class);
-
-    private static final Logger log = LoggerFactory.getLogger(Script.class);
     public static final long MAX_SCRIPT_ELEMENT_SIZE = 520;  // bytes
+    public static final int SIG_SIZE = 75;
+    /**
+     * Max number of sigops allowed in a standard p2sh redeem script
+     */
+    public static final int MAX_P2SH_SIGOPS = 15;
+    private static final Logger log = LoggerFactory.getLogger(Script.class);
     private static final int MAX_OPS_PER_SCRIPT = 201;
     private static final int MAX_STACK_SIZE = 1000;
     private static final int MAX_PUBKEYS_PER_MULTISIG = 20;
     private static final int MAX_SCRIPT_SIZE = 10000;
-    public static final int SIG_SIZE = 75;
-    /** Max number of sigops allowed in a standard p2sh redeem script */
-    public static final int MAX_P2SH_SIGOPS = 15;
-
+    private static final ScriptChunk[] STANDARD_TRANSACTION_SCRIPT_CHUNKS = {
+            new ScriptChunk(ScriptOpCodes.OP_DUP, null),
+            new ScriptChunk(ScriptOpCodes.OP_HASH160, null),
+            new ScriptChunk(ScriptOpCodes.OP_EQUALVERIFY, null),
+            new ScriptChunk(ScriptOpCodes.OP_CHECKSIG, null),
+    };
     // The program is a set of chunks where each element is either [opcode] or [data, data, data ...]
     //FIXME: Make this private.
     protected List<ScriptChunk> chunks;
     // Unfortunately, scripts are not ever re-serialized or canonicalized when used in signature hashing. Thus we
     // must preserve the exact bytes that we read off the wire, along with the parsed form.
     protected byte[] program;
-
     // Creation time of the associated keys in seconds since the epoch.
     private long creationTimeSeconds;
 
-    /** Creates an empty script that serializes to nothing. */
+    /**
+     * Creates an empty script that serializes to nothing.
+     */
     private Script() {
         chunks = new ArrayList<>();
     }
@@ -125,6 +97,7 @@ public class Script {
     /**
      * Construct a Script that copies and wraps the programBytes array. The array is parsed and checked for syntactic
      * validity.
+     *
      * @param programBytes Array of program bytes from a transaction.
      */
     public Script(byte[] programBytes) throws ScriptException {
@@ -133,22 +106,27 @@ public class Script {
         creationTimeSeconds = 0;
     }
 
+    public Script(byte[] programBytes, long creationTimeSeconds) throws ScriptException {
+        program = programBytes;
+        parse(programBytes);
+        this.creationTimeSeconds = creationTimeSeconds;
+    }
 
-    public static Script fromByteArray(byte[] programBytes) throws ScriptException{
+    public static Script fromByteArray(byte[] programBytes) throws ScriptException {
         return new Script(programBytes, LocalDateTime.now().toEpochSecond(ZoneOffset.UTC));
     }
 
-    public static Script fromBitcoindString(String program) throws ScriptException{
+    public static Script fromBitcoindString(String program) throws ScriptException {
         List<ScriptChunk> chunks = stringToChunks(program);
 
         return new Script(chunks);
     }
 
-    public static Script fromAsmString(String program){
-       return new Script(asmToChunks(program));
+    public static Script fromAsmString(String program) {
+        return new Script(asmToChunks(program));
     }
 
-    private static List<ScriptChunk> asmToChunks(String str){
+    private static List<ScriptChunk> asmToChunks(String str) {
 
         List<ScriptChunk> chunks = new ArrayList<ScriptChunk>();
 
@@ -192,52 +170,7 @@ public class Script {
         return chunks;
     }
 
-    public Script(byte[] programBytes, long creationTimeSeconds) throws ScriptException {
-        program = programBytes;
-        parse(programBytes);
-        this.creationTimeSeconds = creationTimeSeconds;
-    }
-
-    public long getCreationTimeSeconds() {
-        return creationTimeSeconds;
-    }
-
-    public void setCreationTimeSeconds(long creationTimeSeconds) {
-        this.creationTimeSeconds = creationTimeSeconds;
-    }
-
-    /**
-     * Returns the program opcodes as a string, for example "[1234] DUP HASH160", or "&lt;empty&gt;".
-     */
-    @Override
-    public String toString() {
-        if (!chunks.isEmpty())
-            return Utils.SPACE_JOINER.join(chunks);
-        else
-            return "<empty>";
-    }
-
-    public String toBitcoindString(){
-        if (!chunks.isEmpty()) {
-            List<String> asmStrings = chunks.stream().map(chunk -> chunk.toEncodedString(false)).collect(Collectors.toList());
-            return Utils.SPACE_JOINER.join(asmStrings);
-        } else {
-            return "<empty>";
-        }
-    }
-
-
-    public String toAsmString(){
-        if (!chunks.isEmpty()) {
-            List<String> asmStrings = chunks.stream().map(chunk -> chunk.toEncodedString(true)).collect(Collectors.toList());
-            return Utils.SPACE_JOINER.join(asmStrings);
-        } else {
-            return "";
-        }
-    }
-
-
-    private static List<ScriptChunk> stringToChunks(String script) throws ScriptException{
+    private static List<ScriptChunk> stringToChunks(String script) throws ScriptException {
 
         if (script.trim().isEmpty()) {
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Unexpected end of script");
@@ -249,17 +182,17 @@ public class Script {
         tokenList.removeIf(token -> token.trim().isEmpty());
 
         //encode tokens, leaving non-token elements intact
-        for (int index = 0; index < tokenList.size();) {
+        for (int index = 0; index < tokenList.size(); ) {
             String token = tokenList.get(index);
 
             int opcodenum = OP_INVALIDOPCODE;
             if (token.startsWith("OP_")) {
                 opcodenum = ScriptOpCodes.getOpCode(token.replaceFirst("OP_", ""));
-            }else{
+            } else {
                 opcodenum = Integer.valueOf(opcodenum);
             }
 
-            if (opcodenum == OP_INVALIDOPCODE ) {
+            if (opcodenum == OP_INVALIDOPCODE) {
                 try {
                     opcodenum = Integer.valueOf(token);
                     if (opcodenum > 0 && opcodenum < OP_PUSHDATA1) {
@@ -267,16 +200,16 @@ public class Script {
                         _chunks.add(newChunk);
                     }
                     index = index + 2; //step by two
-                }catch (NumberFormatException ex){
+                } catch (NumberFormatException ex) {
                     throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, ex.getMessage());
-                }catch (Exception ex){
+                } catch (Exception ex) {
                     throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, ex.getMessage());
                 }
 
             } else if (opcodenum == ScriptOpCodes.OP_PUSHDATA1 ||
                     opcodenum == ScriptOpCodes.OP_PUSHDATA2 ||
                     opcodenum == ScriptOpCodes.OP_PUSHDATA4) {
-                if (!tokenList.get(index + 2).substring(0, 2).equals("0x")) {
+                if (!tokenList.get(index + 2).startsWith("0x")) {
                     throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Pushdata data must start with 0x");
                 }
                 byte[] data = Utils.HEX.decode(tokenList.get(index + 2).substring(2));
@@ -290,96 +223,6 @@ public class Script {
 
         return _chunks;
     }
-
-    /** Returns the serialized program as a newly created byte array. */
-    public byte[] getProgram() {
-        try {
-            //TODO: Investigate this. Failing to roundtrip might introduce problems
-            // Don't round-trip as Bitcoin Core doesn't and it would introduce a mismatch.
-            if (program != null)
-                return Arrays.copyOf(program, program.length);
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            for (ScriptChunk chunk : chunks) {
-                chunk.write(bos);
-            }
-            program = bos.toByteArray();
-            return program;
-        } catch (IOException e) {
-            throw new RuntimeException(e);  // Cannot happen.
-        }
-    }
-
-    /** Returns an immutable list of the scripts parsed form. Each chunk is either an opcode or data element. */
-    public List<ScriptChunk> getChunks() {
-        return Collections.unmodifiableList(chunks);
-    }
-
-    private static final ScriptChunk[] STANDARD_TRANSACTION_SCRIPT_CHUNKS = {
-        new ScriptChunk(ScriptOpCodes.OP_DUP, null),
-        new ScriptChunk(ScriptOpCodes.OP_HASH160, null),
-        new ScriptChunk(ScriptOpCodes.OP_EQUALVERIFY, null),
-        new ScriptChunk(ScriptOpCodes.OP_CHECKSIG, null),
-    };
-
-    /**
-     * <p>To run a script, first we parse it which breaks it up into chunks representing pushes of data or logical
-     * opcodes. Then we can run the parsed chunks.</p>
-     *
-     * <p>The reason for this split, instead of just interpreting directly, is to make it easier
-     * to reach into a programs structure and pull out bits of data without having to run it.
-     * This is necessary to render the to addresses of transactions in a user interface.
-     * Bitcoin Core does something similar.</p>
-     */
-    private void parse(byte[] program) throws ScriptException {
-        chunks = new ArrayList<>(5);   // Common size.
-        ByteArrayInputStream bis = new ByteArrayInputStream(program);
-        while (bis.available() > 0) {
-            int opcode = bis.read();
-
-            long dataToRead = -1;
-            if (opcode >= 0 && opcode < OP_PUSHDATA1) {
-                // Read some bytes of data, where how many is the opcode value itself.
-                dataToRead = opcode;
-
-            } else if (opcode == OP_PUSHDATA1) {
-                if (bis.available() < 1) throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Unexpected end of script");
-                dataToRead = bis.read();
-            } else if (opcode == OP_PUSHDATA2) {
-                // Read a short, then read that many bytes of data.
-                if (bis.available() < 2) throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Unexpected end of script");
-                dataToRead = Utils.readUint16FromStream(bis);
-            } else if (opcode == OP_PUSHDATA4) {
-                // Read a uint32, then read that many bytes of data.
-                if (bis.available() < 4) throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Unexpected end of script");
-                dataToRead = Utils.readUint32FromStream(bis);
-            }else{
-
-            }
-
-            if (dataToRead == -1) {
-                chunks.add(new ScriptChunk(opcode, null));
-            } else {
-                if (dataToRead > bis.available())
-                    throw new ScriptException(ScriptError.SCRIPT_ERR_BAD_OPCODE, "Length of push value is not equal to length of data");
-
-                try {
-
-                    ScriptChunk chunk;
-                    byte[] data = new byte[(int) dataToRead];
-
-                    bis.read(data, 0, (int) dataToRead);
-                    chunk = new ScriptChunk(opcode, data);
-
-                    chunks.add(chunk);
-                }catch(Exception ex){
-                    bis.read();
-                }
-            }
-            // Save some memory by eliminating redundant copies of the same chunk objects.
-        }
-    }
-
-    ////////////////////// Interface for writing scripts from scratch ////////////////////////////////
 
     /**
      * Writes out the given byte buffer to the output stream with the correct opcode prefix
@@ -425,41 +268,25 @@ public class Script {
         }
     }
 
-
-    private int findKeyInRedeem(ECKey key) {
-        checkArgument(chunks.get(0).isOpCode()); // P2SH scriptSig
-        int numKeys = Script.decodeFromOpN(chunks.get(chunks.size() - 2).opcode);
-        for (int i = 0 ; i < numKeys ; i++) {
-            if (Arrays.equals(chunks.get(1 + i).data, key.getPubKey())) {
-                return i;
-            }
-        }
-
-        throw new IllegalStateException("Could not find matching key " + key.toString() + " in script " + this);
-    }
-
-
-    ////////////////////// Interface used during verification of transactions/blocks ////////////////////////////////
-
     public static int getSigOpCount(List<ScriptChunk> chunks, boolean accurate) throws ScriptException {
         int sigOps = 0;
         int lastOpCode = OP_INVALIDOPCODE;
         for (ScriptChunk chunk : chunks) {
             if (chunk.isOpCode()) {
                 switch (chunk.opcode) {
-                case OP_CHECKSIG:
-                case OP_CHECKSIGVERIFY:
-                    sigOps++;
-                    break;
-                case OP_CHECKMULTISIG:
-                case OP_CHECKMULTISIGVERIFY:
-                    if (accurate && lastOpCode >= OP_1 && lastOpCode <= OP_16)
-                        sigOps += decodeFromOpN(lastOpCode);
-                    else
-                        sigOps += 20;
-                    break;
-                default:
-                    break;
+                    case OP_CHECKSIG:
+                    case OP_CHECKSIGVERIFY:
+                        sigOps++;
+                        break;
+                    case OP_CHECKMULTISIG:
+                    case OP_CHECKMULTISIGVERIFY:
+                        if (accurate && lastOpCode >= OP_1 && lastOpCode <= OP_16)
+                            sigOps += decodeFromOpN(lastOpCode);
+                        else
+                            sigOps += 20;
+                        break;
+                    default:
+                        break;
                 }
                 lastOpCode = chunk.opcode;
             }
@@ -488,7 +315,6 @@ public class Script {
             return value - 1 + OP_1;
     }
 
-
     private static boolean equalsRange(byte[] a, int start, byte[] b) {
         if (start + b.length > a.length)
             return false;
@@ -497,7 +323,7 @@ public class Script {
                 return false;
         return true;
     }
-    
+
     /**
      * Returns the script bytes of inputScript with all instances of the specified script object removed
      */
@@ -508,7 +334,7 @@ public class Script {
         int cursor = 0;
         while (cursor < inputScript.length) {
             boolean skip = equalsRange(inputScript, cursor, chunkToRemove);
-            
+
             int opcode = inputScript[cursor++] & 0xFF;
             int additionalBytes = 0;
             if (opcode >= 0 && opcode < OP_PUSHDATA1) {
@@ -532,19 +358,16 @@ public class Script {
         }
         return bos.toByteArray();
     }
-    
+
     /**
      * Returns the script bytes of inputScript with all instances of the given op code removed
      */
     public static byte[] removeAllInstancesOfOp(byte[] inputScript, int opCode) {
-        return removeAllInstancesOf(inputScript, new byte[] {(byte)opCode});
+        return removeAllInstancesOf(inputScript, new byte[]{(byte) opCode});
     }
-    
-    ////////////////////// Script verification and helpers ////////////////////////////////
-    
+
     private static boolean castToBool(byte[] data) {
-        for (int i = 0; i < data.length; i++)
-        {
+        for (int i = 0; i < data.length; i++) {
             // "Can be negative zero" - Bitcoin Core (see OpenSSL's BN_bn2mpi)
             if (data[i] != 0)
                 return !(i == data.length - 1 && (data[i] & 0xFF) == 0x80);
@@ -552,12 +375,14 @@ public class Script {
         return false;
     }
 
+    ////////////////////// Interface for writing scripts from scratch ////////////////////////////////
+
     /**
      * Cast a script chunk to a BigInteger.
      *
+     * @throws ScriptException if the chunk is longer than 4 bytes.
      * @see #castToBigInteger(byte[], int, boolean) for values with different maximum
      * sizes.
-     * @throws ScriptException if the chunk is longer than 4 bytes.
      */
     private static BigInteger castToBigInteger(byte[] chunk, final boolean requireMinimal) throws ScriptException {
         return castToBigInteger(chunk, 4, requireMinimal);
@@ -568,11 +393,12 @@ public class Script {
      * {@link #castToBigInteger(byte[], boolean)} instead, this is only for cases where
      * the normal maximum length does not apply (i.e. CHECKLOCKTIMEVERIFY, CHECKSEQUENCEVERIFY).
      *
-     * @param maxLength the maximum length in bytes.
+     * @param maxLength      the maximum length in bytes.
      * @param requireMinimal check if the number is encoded with the minimum possible number of bytes
      * @throws ScriptException if the chunk is longer than the specified maximum.
      */
-    /* package private */ static BigInteger castToBigInteger(final byte[] chunk, final int maxLength, final boolean requireMinimal) throws ScriptException {
+    /* package private */
+    static BigInteger castToBigInteger(final byte[] chunk, final int maxLength, final boolean requireMinimal) throws ScriptException {
         if (chunk.length > maxLength)
             throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Script attempted to use an integer larger than " + maxLength + " bytes");
 
@@ -590,7 +416,7 @@ public class Script {
                 // is +-255, which encode to 0xff00 and 0xff80 respectively.
                 // (big-endian).
                 if (chunk.length <= 1 || (chunk[chunk.length - 2] & 0x80) == 0) {
-                    throw  new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "non-minimally encoded script number");
+                    throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "non-minimally encoded script number");
                 }
             }
         }
@@ -598,12 +424,172 @@ public class Script {
         return Utils.decodeMPI(Utils.reverseBytes(chunk), false);
     }
 
-    /** @deprecated use {@link ScriptPattern#isOpReturn(Script)} */
+    public static boolean isPushOnly(Script scriptSig) {
+
+        List<ScriptChunk> chunks = scriptSig.getChunks();
+
+        if (chunks.isEmpty()) {
+            return true;
+        }
+
+        for (ScriptChunk chunk : chunks) {
+            if (!chunk.isPushData()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public long getCreationTimeSeconds() {
+        return creationTimeSeconds;
+    }
+
+
+    ////////////////////// Interface used during verification of transactions/blocks ////////////////////////////////
+
+    public void setCreationTimeSeconds(long creationTimeSeconds) {
+        this.creationTimeSeconds = creationTimeSeconds;
+    }
+
+    /**
+     * Returns the program opcodes as a string, for example "[1234] DUP HASH160", or "&lt;empty&gt;".
+     */
+    @Override
+    public String toString() {
+        if (!chunks.isEmpty())
+            return Utils.SPACE_JOINER.join(chunks);
+        else
+            return "<empty>";
+    }
+
+    public String toBitcoindString() {
+        if (!chunks.isEmpty()) {
+            List<String> asmStrings = chunks.stream().map(chunk -> chunk.toEncodedString(false)).collect(Collectors.toList());
+            return Utils.SPACE_JOINER.join(asmStrings);
+        } else {
+            return "<empty>";
+        }
+    }
+
+    public String toAsmString() {
+        if (!chunks.isEmpty()) {
+            List<String> asmStrings = chunks.stream().map(chunk -> chunk.toEncodedString(true)).collect(Collectors.toList());
+            return Utils.SPACE_JOINER.join(asmStrings);
+        } else {
+            return "";
+        }
+    }
+
+    /**
+     * Returns the serialized program as a newly created byte array.
+     */
+    public byte[] getProgram() {
+        try {
+            //TODO: Investigate this. Failing to roundtrip might introduce problems
+            // Don't round-trip as Bitcoin Core doesn't and it would introduce a mismatch.
+            if (program != null)
+                return Arrays.copyOf(program, program.length);
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            for (ScriptChunk chunk : chunks) {
+                chunk.write(bos);
+            }
+            program = bos.toByteArray();
+            return program;
+        } catch (IOException e) {
+            throw new RuntimeException(e);  // Cannot happen.
+        }
+    }
+
+    /**
+     * Returns an immutable list of the scripts parsed form. Each chunk is either an opcode or data element.
+     */
+    public List<ScriptChunk> getChunks() {
+        return Collections.unmodifiableList(chunks);
+    }
+
+    ////////////////////// Script verification and helpers ////////////////////////////////
+
+    /**
+     * <p>To run a script, first we parse it which breaks it up into chunks representing pushes of data or logical
+     * opcodes. Then we can run the parsed chunks.</p>
+     *
+     * <p>The reason for this split, instead of just interpreting directly, is to make it easier
+     * to reach into a programs structure and pull out bits of data without having to run it.
+     * This is necessary to render the to addresses of transactions in a user interface.
+     * Bitcoin Core does something similar.</p>
+     */
+    private void parse(byte[] program) throws ScriptException {
+        chunks = new ArrayList<>(5);   // Common size.
+        ByteArrayInputStream bis = new ByteArrayInputStream(program);
+        while (bis.available() > 0) {
+            int opcode = bis.read();
+
+            long dataToRead = -1;
+            if (opcode >= 0 && opcode < OP_PUSHDATA1) {
+                // Read some bytes of data, where how many is the opcode value itself.
+                dataToRead = opcode;
+
+            } else if (opcode == OP_PUSHDATA1) {
+                if (bis.available() < 1)
+                    throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Unexpected end of script");
+                dataToRead = bis.read();
+            } else if (opcode == OP_PUSHDATA2) {
+                // Read a short, then read that many bytes of data.
+                if (bis.available() < 2)
+                    throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Unexpected end of script");
+                dataToRead = Utils.readUint16FromStream(bis);
+            } else if (opcode == OP_PUSHDATA4) {
+                // Read a uint32, then read that many bytes of data.
+                if (bis.available() < 4)
+                    throw new ScriptException(ScriptError.SCRIPT_ERR_UNKNOWN_ERROR, "Unexpected end of script");
+                dataToRead = Utils.readUint32FromStream(bis);
+            } else {
+
+            }
+
+            if (dataToRead == -1) {
+                chunks.add(new ScriptChunk(opcode, null));
+            } else {
+                if (dataToRead > bis.available())
+                    throw new ScriptException(ScriptError.SCRIPT_ERR_BAD_OPCODE, "Length of push value is not equal to length of data");
+
+                try {
+
+                    ScriptChunk chunk;
+                    byte[] data = new byte[(int) dataToRead];
+
+                    bis.read(data, 0, (int) dataToRead);
+                    chunk = new ScriptChunk(opcode, data);
+
+                    chunks.add(chunk);
+                } catch (Exception ex) {
+                    bis.read();
+                }
+            }
+            // Save some memory by eliminating redundant copies of the same chunk objects.
+        }
+    }
+
+    private int findKeyInRedeem(ECKey key) {
+        checkArgument(chunks.get(0).isOpCode()); // P2SH scriptSig
+        int numKeys = Script.decodeFromOpN(chunks.get(chunks.size() - 2).opcode);
+        for (int i = 0; i < numKeys; i++) {
+            if (Arrays.equals(chunks.get(1 + i).data, key.getPubKey())) {
+                return i;
+            }
+        }
+
+        throw new IllegalStateException("Could not find matching key " + key.toString() + " in script " + this);
+    }
+
+    /**
+     * @deprecated use {@link ScriptPattern#isOpReturn(Script)}
+     */
     @Deprecated
     public boolean isOpReturn() {
         return ScriptPattern.isOpReturn(this);
     }
-
 
     // Utility that doesn't copy for internal use
     private byte[] getQuickProgram() {
@@ -614,6 +600,7 @@ public class Script {
 
     /**
      * Get the {@link ScriptType}.
+     *
      * @return The script type, or null if the script is of unknown type
      */
     public @Nullable ScriptType getScriptType() {
@@ -630,7 +617,7 @@ public class Script {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        return Arrays.equals(getQuickProgram(), ((Script)o).getQuickProgram());
+        return Arrays.equals(getQuickProgram(), ((Script) o).getQuickProgram());
     }
 
     @Override
@@ -638,22 +625,44 @@ public class Script {
         return Arrays.hashCode(getQuickProgram());
     }
 
+    /**
+     * Enumeration to encapsulate the type of this script.
+     */
+    public enum ScriptType {
+        P2PKH(1), // pay to pubkey hash (aka pay to address)
+        P2PK(2), // pay to pubkey
+        P2SH(3); // pay to script hash
 
-    public static boolean isPushOnly(Script scriptSig) {
+        public final int id;
 
-        List<ScriptChunk> chunks = scriptSig.getChunks();
-
-        if (chunks.isEmpty()){
-            return true;
+        ScriptType(int id) {
+            this.id = id;
         }
+    }
 
-        for (ScriptChunk chunk : chunks){
-            if (!chunk.isPushData()){
-                return false;
-            }
-        }
 
-        return true;
+    /**
+     * Flags to pass to {Script#correctlySpends(Transaction, int, Coin, Script, Set)}.
+     * Note currently only P2SH, DERSIG and NULLDUMMY are actually supported.
+     */
+    public enum VerifyFlag {
+        P2SH, // Enable BIP16-style subscript evaluation.
+        STRICTENC, // Passing a non-strict-DER signature or one with undefined hashtype to a checksig operation causes script failure.
+        DERSIG, // Passing a non-strict-DER signature to a checksig operation causes script failure (softfork safe, BIP66 rule 1)
+        LOW_S, // Passing a non-strict-DER signature or one with S > order/2 to a checksig operation causes script failure
+        NULLDUMMY, // Verify dummy stack item consumed by CHECKMULTISIG is of zero-length.
+        SIGPUSHONLY, // Using a non-push operator in the scriptSig causes script failure (softfork safe, BIP62 rule 2).
+        MINIMALDATA, // Require minimal encodings for all push operations and number encodings
+        DISCOURAGE_UPGRADABLE_NOPS, // Discourage use of NOPs reserved for upgrades (NOP1-10)
+        CLEANSTACK, // Require that only a single stack element remains after evaluation.
+        CHECKLOCKTIMEVERIFY, // Enable CHECKLOCKTIMEVERIFY operation
+        CHECKSEQUENCEVERIFY,
+        SIGHASH_FORKID,
+        MONOLITH_OPCODES, // May 15, 2018 Hard fork
+        UTXO_AFTER_GENESIS,
+        MINIMALIF,
+        NULLFAIL,
+        COMPRESSED_PUBKEYTYPE
     }
 
 }

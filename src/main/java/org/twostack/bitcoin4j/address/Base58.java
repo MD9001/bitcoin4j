@@ -51,6 +51,7 @@ public class Base58 {
     public static final char[] ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".toCharArray();
     private static final char ENCODED_ZERO = ALPHABET[0];
     private static final int[] INDEXES = new int[128];
+
     static {
         Arrays.fill(INDEXES, -1);
         for (int i = 0; i < ALPHABET.length; i++) {
@@ -67,7 +68,7 @@ public class Base58 {
     public static String encode(byte[] input) {
         if (input.length == 0) {
             return "";
-        }       
+        }
         // Count leading zeros.
         int zeros = 0;
         while (zeros < input.length && input[zeros] == 0) {
@@ -96,7 +97,7 @@ public class Base58 {
 
     /**
      * Encodes the given version and bytes as a base58 string. A checksum is appended.
-     * 
+     *
      * @param version the version to encode
      * @param payload the bytes to encode, e.g. pubkey hash
      * @return the base58-encoded string
@@ -157,7 +158,7 @@ public class Base58 {
         // Return decoded data (including original number of leading zeros).
         return Arrays.copyOfRange(decoded, outputStart - zeros, decoded.length);
     }
-    
+
     public static BigInteger decodeToBigInteger(String input) throws AddressFormatException {
         return new BigInteger(1, decode(input));
     }
@@ -168,11 +169,11 @@ public class Base58 {
      * removed from the returned data.
      *
      * @param input the base58-encoded string to decode (which should include the checksum)
-     * @throws AddressFormatException if the input is not base 58 or the checksum does not validate.
      * @return the original data bytes as a byte array
+     * @throws AddressFormatException if the input is not base 58 or the checksum does not validate.
      */
     public static byte[] decodeChecked(String input) throws AddressFormatException {
-        byte[] decoded  = decode(input);
+        byte[] decoded = decode(input);
         if (decoded.length < 4)
             throw new AddressFormatException.InvalidDataLength("Input too short: " + decoded.length);
         byte[] data = Arrays.copyOfRange(decoded, 0, decoded.length - 4);
@@ -188,11 +189,11 @@ public class Base58 {
      * in the specified base, by the given divisor. The given number is modified in-place
      * to contain the quotient, and the return value is the remainder.
      *
-     * @param number the number to divide
+     * @param number     the number to divide
      * @param firstDigit the index within the array of the first non-zero digit
-     *        (this is used for optimization by skipping the leading zeros)
-     * @param base the base in which the number's digits are represented (up to 256)
-     * @param divisor the number to divide by (up to 256)
+     *                   (this is used for optimization by skipping the leading zeros)
+     * @param base       the base in which the number's digits are represented (up to 256)
+     * @param divisor    the number to divide by (up to 256)
      * @return the remainder of the division operation
      */
     private static byte divmod(byte[] number, int firstDigit, int base, int divisor) {

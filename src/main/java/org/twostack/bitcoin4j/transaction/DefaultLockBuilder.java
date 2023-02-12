@@ -17,14 +17,14 @@ package org.twostack.bitcoin4j.transaction;
 
 import org.twostack.bitcoin4j.script.Script;
 
-public class DefaultLockBuilder extends LockingScriptBuilder{
+public class DefaultLockBuilder extends LockingScriptBuilder {
 
-    public DefaultLockBuilder(Script script){
-       super(script);
+    public DefaultLockBuilder(Script script) {
+        super(script);
     }
 
-    public DefaultLockBuilder(){
-       super();
+    public DefaultLockBuilder() {
+        super();
     }
 
     @Override

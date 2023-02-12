@@ -25,15 +25,14 @@ import java.util.List;
 
 public abstract class UnlockingScriptBuilder {
 
+    protected Script script;
     List<TransactionSignature> signatures = new ArrayList<>();
 
-    protected Script script;
-
-    public UnlockingScriptBuilder(Script script){
+    public UnlockingScriptBuilder(Script script) {
         this.script = script;
     }
 
-    public UnlockingScriptBuilder(){
+    public UnlockingScriptBuilder() {
         this.script = new ScriptBuilder().build();
     }
 

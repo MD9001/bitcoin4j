@@ -28,104 +28,68 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.twostack.bitcoin4j.Utils.HEX;
 
 public class TransactionBuilder {
 
-    private List<TransactionInput> inputs = new ArrayList<>();
-    private List<TransactionOutput> outputs = new ArrayList<>();
-
-    //Map the transactionIds we're spending from, to the corresponding UTXO amount in the output
-    private Map<String, BigInteger> spendingMap = new HashMap();
-
-    private LockingScriptBuilder changeScriptBuilder;
-    private BigInteger changeAmount = BigInteger.ZERO;
-
-    public TransactionOutput changeOutput;
-
-    private final long DEFAULT_FEE_PER_KB = 512; //amount in satoshis
-
     static final BigInteger DUST_AMOUNT = BigInteger.valueOf(256);
-
-    /// Margin of error to allow fees in the vicinity of the expected value but doesn't allow a big difference
-    private static final BigInteger FEE_SECURITY_MARGIN = BigInteger.valueOf(150);
-
-    private long feePerKb = DEFAULT_FEE_PER_KB;
-
-    private BigInteger transactionFee;
-
-    private boolean changeScriptFlag = false;
-
-    private Set<TransactionOption> transactionOptions = new HashSet<TransactionOption>();
-
-
     /// Safe upper bound for change address script size in bytes
     static final int CHANGE_OUTPUT_MAX_SIZE = 20 + 4 + 34 + 4;
     static final int MAXIMUM_EXTRA_SIZE = 4 + 9 + 9 + 4;
     static final int SCRIPT_MAX_SIZE = 149;
+    /// Margin of error to allow fees in the vicinity of the expected value but doesn't allow a big difference
+    private static final BigInteger FEE_SECURITY_MARGIN = BigInteger.valueOf(150);
+    private final long DEFAULT_FEE_PER_KB = 512; //amount in satoshis
+    public TransactionOutput changeOutput;
+    private final List<TransactionInput> inputs = new ArrayList<>();
+    private final List<TransactionOutput> outputs = new ArrayList<>();
+    //Map the transactionIds we're spending from, to the corresponding UTXO amount in the output
+    private final Map<String, BigInteger> spendingMap = new HashMap();
+    private LockingScriptBuilder changeScriptBuilder;
+    private BigInteger changeAmount = BigInteger.ZERO;
+    private long feePerKb = DEFAULT_FEE_PER_KB;
+    private BigInteger transactionFee;
+    private boolean changeScriptFlag = false;
+    private final Set<TransactionOption> transactionOptions = new HashSet<TransactionOption>();
+    private final long nLockTime = 0;
 
-    private long nLockTime = 0;
-
-    private HashMap<String, SignerDto> signerMap = new HashMap();
-
-
-    private class SignerDto{
-        private TransactionSigner signer;
-        private TransactionOutpoint outpoint;
-
-        private SignerDto(){}
-
-        SignerDto(TransactionSigner signer, TransactionOutpoint outpoint){
-            this.signer = signer;
-            this.outpoint = outpoint;
-        }
-
-        public TransactionSigner getSigner() {
-            return signer;
-        }
-
-        public TransactionOutpoint getOutpoint() {
-            return outpoint;
-        }
-    }
-
+    private final HashMap<String, SignerDto> signerMap = new HashMap();
 
     /**
-     utxoMap is expected to have :
-
-     {
-     "transactionId" : [String],
-     "satoshis", [BigInteger],
-     "sequenceNumber", [long],
-     "outputIndex", [int],
-     "scriptPubKey", [String]
-     }
+     * utxoMap is expected to have :
+     * <p>
+     * {
+     * "transactionId" : [String],
+     * "satoshis", [BigInteger],
+     * "sequenceNumber", [long],
+     * "outputIndex", [int],
+     * "scriptPubKey", [String]
+     * }
      */
-    public TransactionBuilder spendFromUtxoMap(TransactionSigner signer, Map<String, Object> utxoMap, @Nullable  UnlockingScriptBuilder unlocker){
+    public TransactionBuilder spendFromUtxoMap(TransactionSigner signer, Map<String, Object> utxoMap, @Nullable UnlockingScriptBuilder unlocker) {
 
         String transactionId = (String) utxoMap.get("transactionId");
 
-        int outputIndex = (int ) utxoMap.get("outputIndex");
+        int outputIndex = (int) utxoMap.get("outputIndex");
         long sequenceNumber = (long) utxoMap.get("sequenceNumber");
 
         TransactionOutpoint outpoint = new TransactionOutpoint();
         outpoint.setOutputIndex(outputIndex);
-        outpoint.setLockingScript(Script.fromAsmString((String)utxoMap.get("scriptPubKey")));
-        outpoint.setSatoshis((BigInteger)utxoMap.get("satoshis"));
+        outpoint.setLockingScript(Script.fromAsmString((String) utxoMap.get("scriptPubKey")));
+        outpoint.setSatoshis((BigInteger) utxoMap.get("satoshis"));
         outpoint.setTransactionId(transactionId);
 
         String mapKey = transactionId + ":" + outputIndex;
 
         this.signerMap.put(mapKey, new SignerDto(signer, outpoint));
 
-        if (unlocker == null){
+        if (unlocker == null) {
             unlocker = new DefaultUnlockBuilder();
         }
 
         TransactionInput input = new TransactionInput(
-                HEX.decode((String)utxoMap.get("transactionId")),
+                HEX.decode((String) utxoMap.get("transactionId")),
                 outputIndex,
                 sequenceNumber,
                 unlocker
@@ -139,34 +103,34 @@ public class TransactionBuilder {
     }
 
     /**
-        utxoMap is expected to have :
-
-        {
-            "transactionId" : [String],
-            "satoshis", [BigInteger],
-            "sequenceNumber", [long],
-            "outputIndex", [int],
-            "scriptPubKey", [String]
-        }
+     * utxoMap is expected to have :
+     * <p>
+     * {
+     * "transactionId" : [String],
+     * "satoshis", [BigInteger],
+     * "sequenceNumber", [long],
+     * "outputIndex", [int],
+     * "scriptPubKey", [String]
+     * }
      */
-    public TransactionBuilder spendFromUtxoMap(Map<String, Object> utxoMap, @Nullable  UnlockingScriptBuilder unlocker) {
+    public TransactionBuilder spendFromUtxoMap(Map<String, Object> utxoMap, @Nullable UnlockingScriptBuilder unlocker) {
 
-        int outputIndex = (int ) utxoMap.get("outputIndex");
+        int outputIndex = (int) utxoMap.get("outputIndex");
         long sequenceNumber = (long) utxoMap.get("sequenceNumber");
 //        Script scriptPubKey = new Script(HEX.decode((String) utxoMap.get("scriptPubKey")));
 
-        if (unlocker == null){
+        if (unlocker == null) {
             unlocker = new DefaultUnlockBuilder();
         }
 
         TransactionInput input = new TransactionInput(
-                HEX.decode((String)utxoMap.get("transactionId")),
+                HEX.decode((String) utxoMap.get("transactionId")),
                 outputIndex,
                 sequenceNumber,
                 unlocker
         );
 
-        String mapKey = (String) utxoMap.get("transactionId") + ":" + outputIndex;
+        String mapKey = utxoMap.get("transactionId") + ":" + outputIndex;
         spendingMap.put(mapKey, (BigInteger) utxoMap.get("satoshis"));
 
         inputs.add(input);
@@ -175,7 +139,7 @@ public class TransactionBuilder {
 
     }
 
-    public TransactionBuilder spendFromTransaction(TransactionSigner signer, Transaction txn, int outputIndex, long sequenceNumber, UnlockingScriptBuilder unlocker){
+    public TransactionBuilder spendFromTransaction(TransactionSigner signer, Transaction txn, int outputIndex, long sequenceNumber, UnlockingScriptBuilder unlocker) {
 
         //save the transactionId. This is expensive operation which serialises the Tx.
         String transactionId = txn.getTransactionId();
@@ -206,7 +170,7 @@ public class TransactionBuilder {
         return this;
     }
 
-    public TransactionBuilder spendFromTransaction(Transaction txn, int outputIndex, long sequenceNumber, UnlockingScriptBuilder unlocker){
+    public TransactionBuilder spendFromTransaction(Transaction txn, int outputIndex, long sequenceNumber, UnlockingScriptBuilder unlocker) {
 
         TransactionInput input = new TransactionInput(
                 Utils.reverseBytes(txn.getTransactionIdBytes()),
@@ -241,7 +205,6 @@ public class TransactionBuilder {
         return this;
     }
 
-
     public TransactionBuilder spendFromOutpoint(TransactionOutpoint outpoint, long sequenceNumber, UnlockingScriptBuilder unlocker) {
 
         TransactionInput input = new TransactionInput(
@@ -274,7 +237,6 @@ public class TransactionBuilder {
         return this;
     }
 
-
     public TransactionBuilder spendFromOutput(TransactionSigner signer, String utxoTxnId, int outputIndex, BigInteger amount, long sequenceNumber, UnlockingScriptBuilder unlocker) {
 
         TransactionOutpoint outpoint = new TransactionOutpoint();
@@ -299,17 +261,17 @@ public class TransactionBuilder {
         return this;
     }
 
-    public TransactionBuilder spendTo(LockingScriptBuilder locker, BigInteger satoshis) throws TransactionException{
+    public TransactionBuilder spendTo(LockingScriptBuilder locker, BigInteger satoshis) throws TransactionException {
 
         int satoshiCompare = satoshis.compareTo(BigInteger.ZERO);
-        if (satoshiCompare == -1 ) //equivalent of satoshis < 0
+        if (satoshiCompare == -1) //equivalent of satoshis < 0
             throw new TransactionException("You can only spend zero or more satoshis in an output");
 
         Script script;
         if (locker == null) {
             throw new TransactionException("LockingScriptBuilder cannot be null");
-        }else{
-           script = locker.getLockingScript();
+        } else {
+            script = locker.getLockingScript();
         }
 
         TransactionOutput txnOutput = new TransactionOutput(satoshis, script);
@@ -320,10 +282,11 @@ public class TransactionBuilder {
 
     /**
      * Bitcoin Address Where to send any change (lefover satoshis after fees) to
+     *
      * @param changeAddress - Bitcoin Address. Implicitly creates a P2PKH output.
      * @return TransactionBuilder
      */
-    public TransactionBuilder sendChangeTo(Address changeAddress){
+    public TransactionBuilder sendChangeTo(Address changeAddress) {
         changeScriptBuilder = new P2PKHLockBuilder(changeAddress);
 
         return sendChangeTo(changeScriptBuilder);
@@ -335,7 +298,7 @@ public class TransactionBuilder {
      * @param locker - a LockingScriptBuilder instance
      * @return TransactionBuilder
      */
-    public TransactionBuilder sendChangeTo(LockingScriptBuilder locker){
+    public TransactionBuilder sendChangeTo(LockingScriptBuilder locker) {
 
         changeScriptBuilder = locker;
 
@@ -346,13 +309,58 @@ public class TransactionBuilder {
         return this;
     }
 
-    public TransactionBuilder withFeePerKb(long fee){
+    public TransactionBuilder withFeePerKb(long fee) {
         feePerKb = fee;
 
         if (changeScriptBuilder != null)
             updateChangeOutput();
 
         return this;
+    }
+
+    public Transaction build(boolean performChecks) throws TransactionException, IOException, SigHashException, SignatureDecodeException {
+        if (performChecks) {
+            runTransactionChecks();
+        }
+
+        Transaction tx = new Transaction();
+
+        //add transaction inputs
+        tx.addInputs(inputs);
+
+        //add transaction outputs
+        tx.addOutputs(outputs);
+
+        if (changeScriptBuilder != null) {
+            tx.addOutput(getChangeOutput());
+        }
+
+        tx.setLockTime(nLockTime);
+
+        //update inputs with signatures
+//        String txId = tx.getTransactionId();
+        for (int index = 0; index < inputs.size(); index++) {
+            TransactionInput currentInput = inputs.get(index);
+
+            List<Map.Entry<String, SignerDto>> result = signerMap.entrySet().stream().filter((Map.Entry<String, SignerDto> entry) -> {
+                String entryKey = entry.getValue().outpoint.getTransactionId() + ":" + entry.getValue().outpoint.getOutputIndex();
+                String currentInputKey = Utils.HEX.encode(currentInput.getPrevTxnId()) + ":" + currentInput.getPrevTxnOutputIndex();
+                return entryKey.equals(currentInputKey);
+            }).collect(Collectors.toList());
+
+            if (result.size() > 0) {
+
+                SignerDto dto = result.get(0).getValue();
+                TransactionOutput utxoToSpend = new TransactionOutput(dto.outpoint.getSatoshis(), dto.outpoint.getLockingScript());
+
+                //TODO: this side-effect programming where the signer mutates my local variable
+                //      still bothers me.
+                dto.signer.sign(tx, utxoToSpend, index);
+            }
+        }
+
+        return tx;
+
     }
     /*
 
@@ -417,52 +425,6 @@ public class TransactionBuilder {
     }
      */
 
-
-    public Transaction build(boolean performChecks) throws TransactionException, IOException, SigHashException, SignatureDecodeException {
-        if (performChecks){
-            runTransactionChecks();
-        }
-
-        Transaction tx = new Transaction();
-
-        //add transaction inputs
-        tx.addInputs(inputs);
-
-        //add transaction outputs
-        tx.addOutputs(outputs);
-
-        if (changeScriptBuilder != null) {
-            tx.addOutput(getChangeOutput());
-        }
-
-        tx.setLockTime(nLockTime);
-
-        //update inputs with signatures
-//        String txId = tx.getTransactionId();
-        for (int index = 0; index < inputs.size() ; index++) {
-            TransactionInput currentInput = inputs.get(index);
-
-            List<Map.Entry<String, SignerDto>> result = signerMap.entrySet().stream().filter( (Map.Entry<String, SignerDto> entry) -> {
-                String entryKey = entry.getValue().outpoint.getTransactionId() + ":" + entry.getValue().outpoint.getOutputIndex();
-                String currentInputKey = Utils.HEX.encode(currentInput.getPrevTxnId()) + ":" + currentInput.getPrevTxnOutputIndex();
-                return entryKey.equals(currentInputKey);
-            }).collect(Collectors.toList());
-
-            if (result.size() > 0) {
-
-                SignerDto dto = result.get(0).getValue();
-                TransactionOutput utxoToSpend = new TransactionOutput(dto.outpoint.getSatoshis(), dto.outpoint.getLockingScript());
-
-                //TODO: this side-effect programming where the signer mutates my local variable
-                //      still bothers me.
-                dto.signer.sign(tx, utxoToSpend, index);
-            }
-        }
-
-        return tx;
-
-    }
-
     private void runTransactionChecks() throws TransactionException {
         if (invalidSatoshis()) {
             throw new TransactionException("Invalid quantity of satoshis");
@@ -483,6 +445,24 @@ public class TransactionBuilder {
 
     }
 
+    private void checkForDustErrors() throws TransactionException {
+        if (transactionOptions.contains(TransactionOption.DISABLE_DUST_OUTPUTS)) {
+            return;
+        }
+
+        for (TransactionOutput output : outputs) {
+            if (output.getAmount().compareTo(DUST_AMOUNT) == -1) {
+                throw new TransactionException("You have outputs with spending values below the dust limit of " + DUST_AMOUNT);
+            }
+        }
+
+        //check for dust on change output
+        if (getChangeOutput() != null && (getChangeOutput().getAmount().compareTo(DUST_AMOUNT) == -1)) {
+            throw new TransactionException("You have a change output with spending value below the dust limit of " + DUST_AMOUNT);
+        }
+
+    }
+
 //    private void checkForMissingSignatures(){
 //        if (transactionOptions.contains(TransactionOption.DISABLE_FULLY_SIGNED)) return;
 //
@@ -490,26 +470,6 @@ public class TransactionBuilder {
 //            throw new TransactionException("Missing Signatures");
 //        }
 //    }
-
-
-    private void checkForDustErrors() throws TransactionException {
-        if (transactionOptions.contains(TransactionOption.DISABLE_DUST_OUTPUTS)) {
-            return;
-        }
-
-        for (TransactionOutput output : outputs) {
-            if (output.getAmount().compareTo(DUST_AMOUNT) == -1 ) {
-                throw new TransactionException("You have outputs with spending values below the dust limit of " + DUST_AMOUNT.toString());
-            }
-        }
-
-        //check for dust on change output
-        if (getChangeOutput() != null && (getChangeOutput().getAmount().compareTo(DUST_AMOUNT) == -1)){
-            throw new TransactionException("You have a change output with spending value below the dust limit of " + DUST_AMOUNT.toString());
-        }
-
-    }
-
 
     private void checkForFeeErrors(BigInteger unspent) throws TransactionException {
         if ((transactionFee != null) && (transactionFee.compareTo(unspent) != 0)) {
@@ -524,12 +484,12 @@ public class TransactionBuilder {
                     throw new TransactionException("Fee is too large and no change address was provided");
                 }
 
-                throw new TransactionException("expected less than " + maximumFee.toString() + " but got " + unspent.toString());
+                throw new TransactionException("expected less than " + maximumFee + " but got " + unspent);
             }
         }
     }
 
-    private BigInteger getUnspentValue(){
+    private BigInteger getUnspentValue() {
 
         BigInteger inputAmount = calcInputTotals();
         BigInteger outputAmount = calcRecipientTotals();
@@ -539,7 +499,7 @@ public class TransactionBuilder {
     }
 
     private boolean invalidSatoshis() {
-        for (TransactionOutput output: outputs){
+        for (TransactionOutput output : outputs) {
             //    if (this._satoshis > MAX_SAFE_INTEGER) {
             if (output.getAmount().compareTo(BigInteger.ZERO) == -1)
                 return true;
@@ -552,8 +512,7 @@ public class TransactionBuilder {
         return false;
     }
 
-
-    private void updateChangeOutput(){
+    private void updateChangeOutput() {
         //spent amount equals input amount. No change generated. Return.
         if (calcRecipientTotals() == calcInputTotals()) return;
 
@@ -565,18 +524,18 @@ public class TransactionBuilder {
         output.setAmount(changeAmount);
     }
 
-    private TransactionOutput getChangeOutput(){
+    private TransactionOutput getChangeOutput() {
 
         if (changeScriptBuilder == null) return null;
 
-        if (changeOutput == null ){
+        if (changeOutput == null) {
             changeOutput = new TransactionOutput(BigInteger.ZERO, changeScriptBuilder.getLockingScript());
         }
 
         return changeOutput;
     }
 
-    public BigInteger calculateChange(){
+    public BigInteger calculateChange() {
         BigInteger inputAmount = calcInputTotals();
         BigInteger outputAmount = calcRecipientTotals();
         BigInteger unspent = inputAmount.subtract(outputAmount);
@@ -584,14 +543,14 @@ public class TransactionBuilder {
         return unspent.subtract(getFee()); //sub
     }
 
-    public BigInteger getFee(){
+    public BigInteger getFee() {
 
-        if (transactionFee != null){
+        if (transactionFee != null) {
             return transactionFee;
         }
 
         //if no change output set, fees should equal to all the unspent amount
-        if (changeOutput == null){
+        if (changeOutput == null) {
             return calcInputTotals().subtract(calcRecipientTotals());
         }
 
@@ -599,7 +558,7 @@ public class TransactionBuilder {
 
     }
 
-    private BigInteger estimateFee(){
+    private BigInteger estimateFee() {
         long size = estimateSize();
 
         BigInteger fee = BigInteger.valueOf(new Float(size / 1000 * feePerKb).longValue());
@@ -607,28 +566,28 @@ public class TransactionBuilder {
         //if fee is less that 256, set fee at 256 satoshis
         //this is current minimum we set automatically if no explicit fee given
         //FIXME: Make this configurable
-        if (fee.compareTo(BigInteger.valueOf(256)) == -1){
+        if (fee.compareTo(BigInteger.valueOf(256)) == -1) {
             fee = BigInteger.valueOf(256);
         }
 
         return fee;
     }
 
-    public long estimateSize(){
+    public long estimateSize() {
         int result = MAXIMUM_EXTRA_SIZE;
 
-        for (TransactionInput input: inputs){
+        for (TransactionInput input : inputs) {
             result += SCRIPT_MAX_SIZE; //TODO: we're only spending P2PKH atm.
         }
 
-        for (TransactionOutput output: outputs) {
+        for (TransactionOutput output : outputs) {
             result += output.getScript().getProgram().length + 9;
         }
 
         return result;
     }
 
-    public BigInteger calcInputTotals(){
+    public BigInteger calcInputTotals() {
 
         BigInteger amount = BigInteger.ZERO;
         for (BigInteger value : spendingMap.values()) {
@@ -641,17 +600,38 @@ public class TransactionBuilder {
     public BigInteger calcRecipientTotals() {
 
         BigInteger amount = BigInteger.ZERO;
-        for (TransactionOutput output: outputs) {
+        for (TransactionOutput output : outputs) {
             amount = amount.add(output.getAmount());
-        };
+        }
 
         //deduct change output
-        if (changeScriptBuilder != null){
+        if (changeScriptBuilder != null) {
             TransactionOutput changeOutput = getChangeOutput();
             amount = amount.add(changeOutput.getAmount());
         }
 
         return amount;
+    }
+
+    private class SignerDto {
+        private TransactionSigner signer;
+        private TransactionOutpoint outpoint;
+
+        private SignerDto() {
+        }
+
+        SignerDto(TransactionSigner signer, TransactionOutpoint outpoint) {
+            this.signer = signer;
+            this.outpoint = outpoint;
+        }
+
+        public TransactionSigner getSigner() {
+            return signer;
+        }
+
+        public TransactionOutpoint getOutpoint() {
+            return outpoint;
+        }
     }
 
 }

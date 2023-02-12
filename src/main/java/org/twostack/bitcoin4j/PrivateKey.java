@@ -22,7 +22,6 @@ import org.twostack.bitcoin4j.params.NetworkType;
 import org.twostack.bitcoin4j.transaction.ReadUtils;
 
 import java.math.BigInteger;
-import java.util.Arrays;
 
 public class PrivateKey {
 
@@ -34,7 +33,7 @@ public class PrivateKey {
         this(new ECKey(), true, NetworkType.MAIN);
     }
 
-    public PrivateKey(ECKey key){
+    public PrivateKey(ECKey key) {
         this(key, true, NetworkType.MAIN);
     }
 
@@ -44,21 +43,12 @@ public class PrivateKey {
         this._networkType = networkType;
     }
 
-    public byte[] sign(byte[] buffer){
-        ECKey.ECDSASignature sig = this.key.sign(Sha256Hash.wrap(buffer)) ;
-        return sig.encodeToDER();
-    }
-
-    public String toWIF(){
-        return key.getPrivateKeyAsWiF(_networkType);
-    }
-
     //FIXME: We can use DumpedPrivateKey to replace the internals here
     public static PrivateKey fromWIF(String wif) throws InvalidKeyException {
 
         boolean isCompressed = false;
 
-        if (wif.length() != 51 && wif.length() != 52){
+        if (wif.length() != 51 && wif.length() != 52) {
             throw new InvalidKeyException("Valid keys are either 51 or 52 bytes in length");
         }
 
@@ -73,7 +63,7 @@ public class PrivateKey {
         byte[] dataBytes = reader.readBytes(versionAndDataBytes.length - 1);
 
         byte[] keyBytes = dataBytes.clone();
-        if (dataBytes.length == 33){
+        if (dataBytes.length == 33) {
             //drop last byte
             //throw error if last byte is not 0x01 to indicate compression
             if (dataBytes[32] != 0x01) {
@@ -92,47 +82,56 @@ public class PrivateKey {
         return new PrivateKey(key, isCompressed, networkType);
     }
 
-    public String toWif(NetworkType networkType){
-        return this.key.getPrivateKeyAsWiF(networkType);
-    }
+    private static NetworkType decodeNetworkType(String wifKey) throws InvalidKeyException {
 
-
-    private static NetworkType decodeNetworkType(String wifKey) throws InvalidKeyException{
-
-        switch (wifKey.charAt(0)){
-            case '5' : {
+        switch (wifKey.charAt(0)) {
+            case '5': {
                 if (wifKey.length() != 51) {
                     throw new InvalidKeyException("Uncompressed private keys have a length of 51 bytes");
                 }
 
                 return NetworkType.MAIN;
             }
-            case '9' : {
+            case '9': {
                 if (wifKey.length() != 51) {
                     throw new InvalidKeyException("Uncompressed private keys have a length of 51 bytes");
                 }
 
                 return NetworkType.TEST;
             }
-            case 'L' : case 'K' : {
+            case 'L':
+            case 'K': {
                 if (wifKey.length() != 52) {
                     throw new InvalidKeyException("Compressed private keys have a length of 52 bytes");
                 }
 
                 return NetworkType.MAIN;
             }
-            case 'c' : {
+            case 'c': {
                 if (wifKey.length() != 52) {
                     throw new InvalidKeyException("Compressed private keys have a length of 52 bytes");
                 }
 
                 return NetworkType.TEST;
             }
-            default : {
+            default: {
                 throw new InvalidKeyException("Address WIF format must start with either [5] , [9], [L], [K] or [c]");
             }
 
         }
+    }
+
+    public byte[] sign(byte[] buffer) {
+        ECKey.ECDSASignature sig = this.key.sign(Sha256Hash.wrap(buffer));
+        return sig.encodeToDER();
+    }
+
+    public String toWIF() {
+        return key.getPrivateKeyAsWiF(_networkType);
+    }
+
+    public String toWif(NetworkType networkType) {
+        return this.key.getPrivateKeyAsWiF(networkType);
     }
 
     /**

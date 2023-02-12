@@ -40,6 +40,12 @@ public class UnsafeByteArrayOutputStream extends ByteArrayOutputStream {
         super(size);
     }
 
+    private static byte[] copyOf(byte[] in, int length) {
+        byte[] out = new byte[length];
+        System.arraycopy(in, 0, out, 0, Math.min(length, in.length));
+        return out;
+    }
+
     /**
      * Writes the specified byte to this byte array output stream.
      *
@@ -98,7 +104,7 @@ public class UnsafeByteArrayOutputStream extends ByteArrayOutputStream {
      * output stream is discarded. The output stream can be used again,
      * reusing the already allocated buffer space.
      *
-     * @see java.io.ByteArrayInputStream#count
+     * @see java.io.ByteArrayInputStream
      */
     @Override
     public void reset() {
@@ -114,7 +120,7 @@ public class UnsafeByteArrayOutputStream extends ByteArrayOutputStream {
      * @see ByteArrayOutputStream#size()
      */
     @Override
-    public byte toByteArray()[] {
+    public byte[] toByteArray() {
         return count == buf.length ? buf : copyOf(buf, count);
     }
 
@@ -122,17 +128,11 @@ public class UnsafeByteArrayOutputStream extends ByteArrayOutputStream {
      * Returns the current size of the buffer.
      *
      * @return the value of the {@code count} field, which is the number
-     *         of valid bytes in this output stream.
+     * of valid bytes in this output stream.
      * @see ByteArrayOutputStream#count
      */
     @Override
     public int size() {
         return count;
-    }
-
-    private static byte[] copyOf(byte[] in, int length) {
-        byte[] out = new byte[length];
-        System.arraycopy(in, 0, out, 0, Math.min(length, in.length));
-        return out;
     }
 }

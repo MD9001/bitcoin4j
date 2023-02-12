@@ -39,12 +39,11 @@ import static com.google.common.base.Preconditions.checkArgument;
  * is a list of {@link ChildNumber}s.</p>
  */
 public class DeterministicHierarchy {
+    public static final int BIP32_STANDARDISATION_TIME_SECS = 1369267200;
     private final Map<HDPath, DeterministicKey> keys = new HashMap<>();
     private final HDPath rootPath;
     // Keep track of how many child keys each node has. This is kind of weak.
     private final Map<HDPath, ChildNumber> lastChildNumbers = new HashMap<>();
-
-    public static final int BIP32_STANDARDISATION_TIME_SECS = 1369267200;
 
     /**
      * Constructs a new hierarchy rooted at the given key. Note that this does not have to be the top of the tree.
@@ -72,9 +71,9 @@ public class DeterministicHierarchy {
     /**
      * Returns a key for the given path, optionally creating it.
      *
-     * @param path the path to the key
+     * @param path         the path to the key
      * @param relativePath whether the path is relative to the root path
-     * @param create whether the key corresponding to path should be created (with any necessary ancestors) if it doesn't exist already
+     * @param create       whether the key corresponding to path should be created (with any necessary ancestors) if it doesn't exist already
      * @return next newly created key using the child derivation function
      * @throws IllegalArgumentException if create is false and the path was not found.
      */
@@ -86,7 +85,7 @@ public class DeterministicHierarchy {
         if (!keys.containsKey(absolutePath)) {
             if (!create)
                 throw new IllegalArgumentException(String.format(Locale.US, "No key found for %s path %s.",
-                    relativePath ? "relative" : "absolute", inputPath.toString()));
+                        relativePath ? "relative" : "absolute", inputPath));
             checkArgument(absolutePath.size() > 0, "Can't derive the master key: nothing to derive from.");
             DeterministicKey parent = get(absolutePath.subList(0, absolutePath.size() - 1), false, true);
             putKey(HDKeyDerivation.deriveChildKey(parent, absolutePath.get(absolutePath.size() - 1)));
@@ -98,9 +97,9 @@ public class DeterministicHierarchy {
      * Extends the tree by calculating the next key that hangs off the given parent path. For example, if you pass a
      * path of 1/2 here and there are already keys 1/2/1 and 1/2/2 then it will derive 1/2/3.
      *
-     * @param parentPath the path to the parent
-     * @param relative whether the path is relative to the root path
-     * @param createParent whether the parent corresponding to path should be created (with any necessary ancestors) if it doesn't exist already
+     * @param parentPath        the path to the parent
+     * @param relative          whether the path is relative to the root path
+     * @param createParent      whether the parent corresponding to path should be created (with any necessary ancestors) if it doesn't exist already
      * @param privateDerivation whether to use private or public derivation
      * @return next newly created key using the child derivation function
      * @throws IllegalArgumentException if the parent doesn't exist and createParent is false.
@@ -112,7 +111,8 @@ public class DeterministicHierarchy {
             try {
                 ChildNumber createChildNumber = getNextChildNumberToDerive(parent.getPath(), privateDerivation);
                 return deriveChild(parent, createChildNumber);
-            } catch (HDDerivationException ignore) { }
+            } catch (HDDerivationException ignore) {
+            }
         }
         throw new HDDerivationException("Maximum number of child derivation attempts reached, this is probably an indication of a bug.");
     }
@@ -136,8 +136,8 @@ public class DeterministicHierarchy {
      * Extends the tree by calculating the requested child for the given path. For example, to get the key at position
      * 1/2/3 you would pass 1/2 as the parent path and 3 as the child number.
      *
-     * @param parentPath the path to the parent
-     * @param relative whether the path is relative to the root path
+     * @param parentPath   the path to the parent
+     * @param relative     whether the path is relative to the root path
      * @param createParent whether the parent corresponding to path should be created (with any necessary ancestors) if it doesn't exist already
      * @return the requested key.
      * @throws IllegalArgumentException if the parent doesn't exist and createParent is false.

@@ -45,17 +45,22 @@ public class BIP38PrivateKey extends PrefixedChecksummedBytes {
     public final byte[] addressHash;
     public final byte[] content;
 
-    public static final class BadPassphraseException extends Exception {
+    private BIP38PrivateKey(NetworkType networkType, byte[] bytes, boolean ecMultiply, boolean compressed,
+                            boolean hasLotAndSequence, byte[] addressHash, byte[] content) throws AddressFormatException {
+        super(networkType, bytes);
+        this.ecMultiply = ecMultiply;
+        this.compressed = compressed;
+        this.hasLotAndSequence = hasLotAndSequence;
+        this.addressHash = addressHash;
+        this.content = content;
     }
 
     /**
      * Construct a password-protected private key from its Base58 representation.
-     * @param networkType
-     *            The network parameters of the chain that the key is for.
-     * @param base58
-     *            The textual form of the password-protected private key.
-     * @throws AddressFormatException
-     *             if the given base58 doesn't parse or the checksum is invalid
+     *
+     * @param networkType The network parameters of the chain that the key is for.
+     * @param base58      The textual form of the password-protected private key.
+     * @throws AddressFormatException if the given base58 doesn't parse or the checksum is invalid
      */
     public static BIP38PrivateKey fromBase58(NetworkType networkType, String base58) throws AddressFormatException {
         byte[] versionAndDataBytes = Base58.decodeChecked(base58);
@@ -98,35 +103,14 @@ public class BIP38PrivateKey extends PrefixedChecksummedBytes {
         return new BIP38PrivateKey(networkType, bytes, ecMultiply, compressed, hasLotAndSequence, addressHash, content);
     }
 
-    private BIP38PrivateKey(NetworkType networkType, byte[] bytes, boolean ecMultiply, boolean compressed,
-                            boolean hasLotAndSequence, byte[] addressHash, byte[] content) throws AddressFormatException {
-        super(networkType, bytes);
-        this.ecMultiply = ecMultiply;
-        this.compressed = compressed;
-        this.hasLotAndSequence = hasLotAndSequence;
-        this.addressHash = addressHash;
-        this.content = content;
-    }
-
     /**
      * Returns the base58-encoded textual form, including version and checksum bytes.
-     * 
+     *
      * @return textual form
      */
     public String toBase58() {
         return Base58.encodeChecked(1, bytes);
     }
-
-//    public ECKey decrypt(String passphrase) throws BadPassphraseException {
-//        String normalizedPassphrase = Normalizer.normalize(passphrase, Normalizer.Form.NFC);
-//        ECKey key = ecMultiply ? decryptEC(normalizedPassphrase) : decryptNoEC(normalizedPassphrase);
-//        PrivateKey privKey = new PrivateKey(key);
-//        Sha256Hash hash = Sha256Hash.twiceOf(LegacyAddress.fromKey(networkAddressType, privKey.getPublicKey()).toString().getBytes(StandardCharsets.US_ASCII));
-//        byte[] actualAddressHash = Arrays.copyOfRange(hash.getBytes(), 0, 4);
-//        if (!Arrays.equals(actualAddressHash, addressHash))
-//            throw new BadPassphraseException();
-//        return key;
-//    }
 
     private ECKey decryptNoEC(String normalizedPassphrase) {
         try {
@@ -146,6 +130,17 @@ public class BIP38PrivateKey extends PrefixedChecksummedBytes {
             throw new RuntimeException(x);
         }
     }
+
+//    public ECKey decrypt(String passphrase) throws BadPassphraseException {
+//        String normalizedPassphrase = Normalizer.normalize(passphrase, Normalizer.Form.NFC);
+//        ECKey key = ecMultiply ? decryptEC(normalizedPassphrase) : decryptNoEC(normalizedPassphrase);
+//        PrivateKey privKey = new PrivateKey(key);
+//        Sha256Hash hash = Sha256Hash.twiceOf(LegacyAddress.fromKey(networkAddressType, privKey.getPublicKey()).toString().getBytes(StandardCharsets.US_ASCII));
+//        byte[] actualAddressHash = Arrays.copyOfRange(hash.getBytes(), 0, 4);
+//        if (!Arrays.equals(actualAddressHash, addressHash))
+//            throw new BadPassphraseException();
+//        return key;
+//    }
 
     private ECKey decryptEC(String normalizedPassphrase) {
         try {
@@ -198,5 +193,8 @@ public class BIP38PrivateKey extends PrefixedChecksummedBytes {
     @Override
     public String toString() {
         return toBase58();
+    }
+
+    public static final class BadPassphraseException extends Exception {
     }
 }
